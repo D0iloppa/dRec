@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  FaGithub, FaMotorcycle, FaReact, FaFlask, FaInstagram
+  FaGithub, FaMotorcycle, FaReact, FaFlask, FaInstagram, FaLinkedin
 } from 'react-icons/fa';
 import {
   SiNaver, SiSpringboot, SiNotion, SiBuymeacoffee
@@ -170,8 +170,8 @@ function HeroSection() {
     { icon: <SiNaver />, href: 'https://blog.naver.com/kdi3939', label: 'BLOG' },
     { icon: <FaInstagram />, href: 'https://www.instagram.com/d0sigo_/', label: 'INSTA' },
     { icon: <SiNotion />, href: 'https://doiloppa.notion.site/22c3bd6b405d80bab5decf184db29072', label: 'RESUME' },
-    { icon: <SiBuymeacoffee />, href: 'https://buymeacoffee.com/doil', label: 'DONATE' },
-
+    { icon: <FaLinkedin />, href: 'https://www.linkedin.com/in/도일-권-939bb2301', label: 'LINKEDIN' },
+    { icon: <SiBuymeacoffee />, href: 'https://buymeacoffee.com/doil', label: 'DONATE' }
   ];
 
   return (
@@ -248,7 +248,6 @@ function App() {
         <div className="container">
           <div className="sectionHeader">
             <h2>✅ 서비스 일람</h2>
-            <p>통합 접근 및 인프라 운영 상태</p>
           </div>
 
           <div className="serviceGrid">

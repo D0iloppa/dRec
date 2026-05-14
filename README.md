@@ -23,3 +23,9 @@
 - `nginx/live/` — SSL 인증서
 - `nginx/cdn/` — CDN 에셋
 - `*.sql` — DB 덤프
+
+
+```
+./wikidoc_publish.sh             # 빌드 + 발행
+./wikidoc_publish.sh --no-build  # 재기동만 (빌드 생략)
+```
