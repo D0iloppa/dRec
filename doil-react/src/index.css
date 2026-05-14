@@ -1,0 +1,68 @@
+:root {
+  --bg-light: #ffffff;
+  --text-light: #111111;
+  --link-light: #007acc;
+  --bg-dark: #0f0f0f;
+  --text-dark: #f5f5f5;
+  --link-dark: #81d4fa;
+  padding: 5px;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", sans-serif;
+  background-color: var(--bg-dark);
+  color: var(--text-dark);
+  transition: background-color 0.3s ease, color 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 1rem;
+}
+
+body.light-mode {
+  background-color: var(--bg-light);
+  color: var(--text-light);
+}
+
+h1 {
+  font-size: 3rem;
+  color: #4fc3f7;
+  margin-bottom: 0.5rem;
+}
+
+ul {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+
+li {
+  margin: 0.5rem 0;
+}
+
+a {
+  color: var(--link-dark);
+  text-decoration: none;
+  font-weight: bold;
+}
+
+body.light-mode a {
+  color: var(--link-light);
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+footer {
+  margin-top: 2rem;
+  font-size: 0.9rem;
+  color: #aaa;
+}
+
+body.light-mode footer {
+  color: #666;
+}

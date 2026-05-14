@@ -1,0 +1,112 @@
+services:
+  doil-gw:
+    image: nginx:latest
+    container_name: doil-gw
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/live:/etc/ssl/live:ro
+      - ./nginx/html:/app/html
+      - ./nginx/cdn:/app/cdn
+    restart: unless-stopped
+    networks:
+      - dev-net
+
+  doil-react-builder:
+    build: ./doil-react
+    container_name: doil-react-builder
+    volumes:
+      - ./doil-react:/app
+    profiles:
+      - builder
+    networks:
+      - dev-net
+
+  doil-wiki:
+    build:
+      context: ./doil-wiki
+      dockerfile: Dockerfile
+    container_name: doil-wiki
+    restart: unless-stopped
+    networks:
+      - dev-net
+
+  db:
+    image: postgres:latest
+    container_name: db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lsh
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: dbdnpfzjs1!
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres_lsh/data:/var/lib/postgresql/data
+    networks:
+      - dev-net
+
+  doil-sb:
+    build:
+      context: ./doil-sb
+      dockerfile: Dockerfile.dev
+    image: doil-sb:dev
+    container_name: doil-sb
+    working_dir: /app
+    volumes:
+      - ./doil-sb:/app
+    command: npm run dev
+    tty: true
+    stdin_open: true
+    restart: unless-stopped
+    networks:
+      - dev-net
+
+  lsh_react:
+    image: node:lts-bullseye
+    container_name: lsh_react
+    working_dir: /app
+    volumes:
+      - ./lsh_react:/app
+    command: sh   # 수동 진입을 위한 shell만
+    tty: true
+    stdin_open: true
+    restart: unless-stopped
+    networks:
+      - dev-net
+
+  lsh_staff:
+    image: node:lts-bullseye
+    container_name: lsh_staff
+    working_dir: /app
+    volumes:
+      - ./lsh_staff:/app
+    command: sh
+    tty: true
+    stdin_open: true
+    restart: unless-stopped
+    networks:
+      - dev-net
+
+  imgproxy:
+    image: darthsim/imgproxy:latest
+    container_name: imgproxy
+    restart: unless-stopped
+    networks:
+      - dev-net
+    volumes:
+      - ./nginx/cdn:/cdn:ro
+    environment:
+      - IMGPROXY_LOCAL_FILESYSTEM_ROOT=/cdn
+      - IMGPROXY_USE_ETAG=true
+      - IMGPROXY_LOG_LEVEL=info
+      - IMGPROXY_BIND=0.0.0.0:8080
+
+networks:
+  dev-net:
+    external: true
+
+volumes:
+  pgdata:

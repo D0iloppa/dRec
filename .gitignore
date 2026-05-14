@@ -1,0 +1,46 @@
+# Legacy lsh services
+lsh_*/
+
+# Database
+postgres_lsh/
+
+# SQL dumps
+*.sql
+
+# Node modules
+**/node_modules/
+
+# React build output
+doil-react/dist/
+
+# Logs
+**/logs/
+*.log
+
+# PID files
+**/.dev-server.pid
+
+# SSL certs (managed separately)
+nginx/live/
+
+# CDN assets
+nginx/cdn/
+cdn_storage/
+imgproxy/
+
+# Nginx built output
+nginx/html/assets/
+nginx/html/index.html
+
+# Jellyfin (data & cache)
+jellyfin/
+
+# Kavita (separate repo)
+Kavita/
+
+# doil-sb (separate repo)
+doil-sb/
+
+# Env files
+**/.env
+**/.env.local

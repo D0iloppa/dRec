@@ -1,0 +1,488 @@
+/* -------------------------------------
+    Variables & Base Reset
+   ------------------------------------- */
+:root {
+  --bg-dark: #0f172a;
+  --bg-light: #f8fafc;
+  --text-dark: #f1f5f9;
+  --text-light: #1e293b;
+  --primary: #6366f1;
+  --primary-hover: #818cf8;
+  --card-bg-dark: rgba(255, 255, 255, 0.03);
+  --card-border-dark: rgba(255, 255, 255, 0.1);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: var(--bg-dark);
+  color: var(--text-dark);
+  transition: background-color 0.3s, color 0.3s;
+  line-height: 1.6;
+}
+
+body.light-mode {
+  background-color: var(--bg-light);
+  color: var(--text-light);
+}
+
+.app-wrapper {
+  width: 100%;
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+/* -------------------------------------
+    Theme Switcher
+   ------------------------------------- */
+.theme-switch {
+  position: fixed;
+  top: 1.5rem;
+  right: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  z-index: 1000;
+  padding: 5px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 20px;
+  backdrop-filter: blur(8px);
+}
+
+.theme-switch-container {
+  position: relative;
+  width: 50px;
+  height: 26px;
+  background-color: #334155;
+  border-radius: 13px;
+  transition: background-color 0.3s;
+}
+
+.switch-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: white;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+body.light-mode .theme-switch-container {
+  background-color: #fbbf24;
+}
+
+body.light-mode .switch-knob {
+  transform: translateX(24px);
+}
+
+.theme-icon {
+  font-size: 1rem;
+}
+
+/* -------------------------------------
+    Hero Section
+   ------------------------------------- */
+.heroWiki {
+  background: linear-gradient(135deg, #0f172a 0%, #1e1e3f 100%);
+  padding: 6rem 0 4rem;
+  border-radius: 0 0 40px 40px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+body.light-mode .heroWiki {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+}
+
+.heroFlex {
+  display: flex;
+  align-items: stretch;
+  /* 하단 정렬을 위해 stretch 사용 */
+  gap: 4rem;
+}
+
+.heroAvatar {
+  width: 280px;
+  height: 280px;
+  border-radius: 24px;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  object-fit: cover;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.heroRight {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  /* 상단 타이틀 - 하단 소셜링크 분리 */
+  padding: 1rem 0;
+}
+
+.heroTitle {
+  font-size: 3.5rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: #ffffff;
+  margin-bottom: 0.5rem;
+}
+
+.heroStatic {
+  font-size: 1.35rem;
+  color: #94a3b8;
+  font-weight: 400;
+  margin-bottom: 1.5rem;
+}
+
+/* CLI Terminal Window */
+.cliWindow {
+  background: #0d1117;
+  border: 1px solid #22c55e26;
+  border-radius: 10px;
+  overflow: hidden;
+  width: 520px;
+  box-shadow: 0 0 24px rgba(34, 197, 94, 0.07);
+  margin-bottom: 2rem;
+}
+
+.cliTitleBar {
+  background: #161b22;
+  padding: 0.45rem 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-bottom: 1px solid #ffffff0d;
+}
+
+.cliDot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cliDot:nth-child(1) {
+  background: #ff5f57;
+}
+
+.cliDot:nth-child(2) {
+  background: #febc2e;
+}
+
+.cliDot:nth-child(3) {
+  background: #28c840;
+}
+
+.cliWindowTitle {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 0.72rem;
+  color: #ffffff40;
+  margin-left: 0.4rem;
+}
+
+.cliBody {
+  padding: 0.75rem 1rem;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 0.9rem;
+  color: #22c55e;
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  min-height: 2.6rem;
+  line-height: 1.5;
+}
+
+.cliPrompt {
+  color: #4ade80;
+  margin-right: 0.6rem;
+  user-select: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cliText {
+  color: #22c55e;
+}
+
+.typeCursor {
+  display: inline-block;
+  width: 8px;
+  height: 0.9em;
+  background: #22c55e;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  flex-shrink: 0;
+  animation: blinkCursor 0.7s step-end infinite;
+}
+
+@keyframes blinkCursor {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Hero Social Links */
+.heroSocialLinks {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.socialLink {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(255, 255, 255, 0.6);
+  text-decoration: none;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  transition: all 0.25s ease;
+}
+
+.socialLink:hover {
+  color: #ffffff;
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.1);
+  transform: translateY(-3px);
+}
+
+.socialLinkIcon {
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+}
+
+.socialLinkLabel {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+/* -------------------------------------
+    Main Content & Service Grid
+   ------------------------------------- */
+.main-content {
+  padding: 5rem 0;
+}
+
+.sectionHeader {
+  margin-bottom: 3rem;
+}
+
+.sectionHeader h2 {
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+}
+
+.sectionHeader p {
+  opacity: 0.6;
+}
+
+.serviceGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+/* Service Card */
+.serviceCard {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--card-bg-dark);
+  border: 1px solid var(--card-border-dark);
+  padding: 2rem;
+  border-radius: 20px;
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+body.light-mode .serviceCard {
+  background-color: #ffffff;
+  border-color: #e2e8f0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.serviceCard:hover {
+  transform: translateY(-8px);
+  border-color: var(--primary);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+}
+
+body.light-mode .serviceCard:hover {
+  box-shadow: 0 20px 25px -5px rgba(99, 102, 241, 0.1);
+}
+
+/* Status Badge */
+.statusBadge {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.25rem 0.6rem;
+  border-radius: 20px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.statusBadge--live {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+
+.statusBadge--coma {
+  background: rgba(100, 116, 139, 0.12);
+  color: #64748b;
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.statusBadge--live .statusDot {
+  animation: pulseDot 1.4s ease-in-out infinite;
+}
+
+@keyframes pulseDot {
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.2;
+    transform: scale(0.7);
+  }
+}
+
+.serviceCardIcon {
+  font-size: 2.5rem;
+  color: var(--primary);
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+}
+
+.serviceCardEmoji {
+  font-size: 2.5rem;
+  line-height: 1;
+}
+
+.serviceCardTitle {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+
+.serviceCardDesc {
+  font-size: 0.95rem;
+  opacity: 0.7;
+  flex: 1;
+  margin-bottom: 1.5rem;
+}
+
+/* Badges */
+.serviceCardBadge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  width: fit-content;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge--public {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.badge--private {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
+/* -------------------------------------
+    Footer
+   ------------------------------------- */
+footer {
+  padding: 4rem 0;
+  border-top: 1px solid var(--card-border-dark);
+  text-align: center;
+  opacity: 0.5;
+  font-size: 0.9rem;
+}
+
+body.light-mode footer {
+  border-top-color: #e2e8f0;
+}
+
+/* -------------------------------------
+    Responsive
+   ------------------------------------- */
+@media (max-width: 992px) {
+  .heroFlex {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 2rem;
+  }
+
+  .heroRight {
+    align-items: center;
+    gap: 2rem;
+  }
+
+  .heroTitle {
+    font-size: 2.5rem;
+  }
+
+  .cliWindow {
+    width: 100%;
+    max-width: 480px;
+  }
+}
+
+@media (max-width: 480px) {
+  .heroAvatar {
+    width: 200px;
+    height: 200px;
+  }
+
+  .serviceGrid {
+    grid-template-columns: 1fr;
+  }
+}
