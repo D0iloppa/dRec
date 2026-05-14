@@ -166,11 +166,12 @@ function HeroSection() {
   const subtitle = useTypewriter(HERO_SUBTITLES);
 
   const socialLinks = [
-    { icon: <SiNaver />, href: 'https://blog.naver.com/kdi3939', label: 'BLOG' },
     { icon: <FaGithub />, href: 'https://github.com/D0iloppa/', label: 'GIT' },
+    { icon: <SiNaver />, href: 'https://blog.naver.com/kdi3939', label: 'BLOG' },
+    { icon: <FaInstagram />, href: 'https://www.instagram.com/d0sigo_/', label: 'INSTA' },
     { icon: <SiNotion />, href: 'https://doiloppa.notion.site/22c3bd6b405d80bab5decf184db29072', label: 'RESUME' },
     { icon: <SiBuymeacoffee />, href: 'https://buymeacoffee.com/doil', label: 'DONATE' },
-    { icon: <FaInstagram />, href: 'https://www.instagram.com/d0sigo_/', label: 'INSTA' },
+
   ];
 
   return (
