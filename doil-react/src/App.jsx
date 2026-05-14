@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import {
-  FaGithub, FaMotorcycle, FaReact, FaFlask
+  FaGithub, FaMotorcycle, FaReact, FaFlask, FaInstagram
 } from 'react-icons/fa';
 import {
-  SiNaver, SiSpringboot, SiNotion
+  SiNaver, SiSpringboot, SiNotion, SiBuymeacoffee
 } from 'react-icons/si';
 import { RiBookmarkLine } from 'react-icons/ri';
 import './App.css';
@@ -133,9 +133,9 @@ function ServiceCard({ icon, title, desc, href, badge, badgeLabel }) {
 }
 
 const HERO_SUBTITLES = [
-  'Full Stack Engineer & DevOps Enthusiast',
+  '🐳 Full Stack Engineer & DevOps Enthusiast',
   '好雨知時節',
-  'Shipping things that actually work.',
+  '😮‍💨 Shipping things that actually work.',
   'Solving yesterday’s bugs with tomorrow’s architecture.',
   '神は細部に宿る'
 ];
@@ -177,6 +177,8 @@ function HeroSection() {
     { icon: <SiNaver />, href: 'https://blog.naver.com/kdi3939', label: 'BLOG' },
     { icon: <FaGithub />, href: 'https://github.com/D0iloppa/', label: 'GIT' },
     { icon: <SiNotion />, href: 'https://doiloppa.notion.site/22c3bd6b405d80bab5decf184db29072', label: 'RESUME' },
+    { icon: <SiBuymeacoffee />, href: 'https://buymeacoffee.com/doil', label: '후원' },
+    { icon: <FaInstagram />, href: 'https://www.instagram.com/d0sigo_/', label: 'INSTA' },
   ];
 
   return (
