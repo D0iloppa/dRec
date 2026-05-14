@@ -26,6 +26,14 @@ const SERVICES = [
     badgeLabel: 'Public',
   },
   {
+    icon: <SiNaver />,
+    title: 'Naver Blog',
+    desc: '기술 블로그 및 일상 기록 공간입니다.',
+    href: 'https://blog.naver.com/kdi3939',
+    badge: 'public',
+    badgeLabel: 'Public',
+  },
+  {
     icon: '🪙',
     title: 'Oh!NO',
     desc: 'SaaS 랜딩 페이지 및 메인 서비스 포털.',
@@ -111,14 +119,12 @@ function ServiceCard({ icon, title, desc, href, badge, badgeLabel }) {
         <span className="statusDot" />
         {status}
       </span>
-      <div className="serviceCardHeader">
-        <div className="serviceCardIcon">
-          {typeof icon === 'string'
-            ? <span className="serviceCardEmoji">{icon}</span>
-            : icon}
-        </div>
-        <div className="serviceCardTitle">{title}</div>
+      <div className="serviceCardIcon">
+        {typeof icon === 'string'
+          ? <span className="serviceCardEmoji">{icon}</span>
+          : icon}
       </div>
+      <div className="serviceCardTitle">{title}</div>
       <div className="serviceCardDesc">{desc}</div>
       <span className={`serviceCardBadge badge--${badge}`}>{badgeLabel}</span>
     </a>
@@ -129,6 +135,7 @@ const HERO_SUBTITLES = [
   '🐳 Full Stack Engineer & DevOps Enthusiast',
   '好雨知時節',
   '😮‍💨 Shipping things that actually work.',
+  'Solving yesterday’s bugs with tomorrow’s architecture.',
   '神は細部に宿る'
 ];
 
