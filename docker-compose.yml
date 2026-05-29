@@ -33,18 +33,33 @@ services:
     networks:
       - dev-net
 
-  db:
+  # DEPRECATED: lsh 서비스 전용 DB. 신규 연동은 db 서비스를 사용할 것.
+  db_lsh:
     image: postgres:latest
-    container_name: db
+    container_name: db_lsh
     restart: unless-stopped
     environment:
       POSTGRES_DB: lsh
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: dbdnpfzjs1!
+    volumes:
+      - ./postgres_lsh/data:/var/lib/postgresql/data
+    networks:
+      - dev-net
+
+  db:
+    image: postgres:latest
+    container_name: db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dev
+      POSTGRES_USER: doil
+      POSTGRES_PASSWORD: doildev1!
     ports:
       - "5432:5432"
     volumes:
-      - ./postgres_lsh/data:/var/lib/postgresql/data
+      - dev_db_data:/var/lib/postgresql/data
+      - ./dev_db/init:/docker-entrypoint-initdb.d
     networks:
       - dev-net
 
@@ -90,6 +105,76 @@ services:
     networks:
       - dev-net
 
+  postfix:
+    # doil.me 도메인의 MX. 수신/송신 모두 담당.
+    #   - 25 : 외부 메일서버 → postfix 인바운드. 수신 후 doil.me 메일은 mailpit(ohno_mailpit:1025) 로 위임.
+    #   - 587: submission. SASL 인증된 클라이언트(=ohno_mailpit 릴레이)만 외부로 송신 허용.
+    # SASL 사용자는 SMTPD_SASL_USERS 로 정의 (user:pass 쉼표 구분). 실제 값은 .env 에서 주입.
+    image: boky/postfix:latest
+    container_name: postfix
+    hostname: doil.me
+    restart: unless-stopped
+    ports:
+      - "25:25"
+      - "587:587"
+    environment:
+      HOSTNAME: doil.me
+      # ALLOWED_SENDER_DOMAINS 는 DKIM 키 생성 대상을 결정. boky 가 이 변수로
+      # check_sender_access 도 추가하지만 아래 smtpd_recipient_restrictions 오버라이드로 무력화됨.
+      # → DKIM 키만 생성, 외부 *@* → doil.me 인바운드는 그대로 허용.
+      ALLOWED_SENDER_DOMAINS: doil.me
+      SMTPD_SASL_USERS: "${POSTFIX_SASL_USERS:?POSTFIX_SASL_USERS must be set in .env}"
+      # DKIM 자동생성 — 첫 기동 시 /etc/opendkim/keys/doil.me/ 에 키 생성.
+      # 볼륨에 영속화 → 재기동 시 동일 키 재사용 (DNS TXT 안정).
+      DKIM_AUTOGENERATE: "1"
+      # doil.me 로 들어온 메일은 mailpit 으로 전달 (catch-all 저장 → 관리자 UI 에서 열람).
+      POSTFIX_mydestination: ""
+      POSTFIX_virtual_mailbox_domains: doil.me
+      POSTFIX_virtual_transport: "smtp:[ohno_mailpit]:1025"
+      POSTFIX_smtp_tls_security_level: may
+      # MX 수신 허용: 목적지가 virtual_mailbox_domains(doil.me) 면 외부 발신도 OK.
+      POSTFIX_smtpd_recipient_restrictions: "permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination, reject"
+    volumes:
+      - ./postfix/dkim-keys:/etc/opendkim/keys
+    networks:
+      - dev-net
+
+  mattermost:
+    image: mattermost/mattermost-team-edition:latest
+    container_name: mattermost
+    restart: unless-stopped
+    environment:
+      MM_SQLSETTINGS_DRIVERNAME: postgres
+      MM_SQLSETTINGS_DATASOURCE: "postgres://doil:doildev1!@db:5432/mattermost?sslmode=disable&connect_timeout=10"
+      MM_SERVICESETTINGS_SITEURL: "https://doil.me/mm"
+      MM_SERVICESETTINGS_LISTENADDRESS: ":8065"
+      MM_FILESETTINGS_MAXFILESIZE: 104857600
+    volumes:
+      - mattermost_data:/mattermost/data
+      - mattermost_logs:/mattermost/logs
+      - mattermost_config:/mattermost/config
+      - mattermost_plugins:/mattermost/plugins
+    depends_on:
+      - db
+    networks:
+      - dev-net
+
+  openproject:
+    image: openproject/openproject:15
+    container_name: openproject
+    restart: unless-stopped
+    environment:
+      OPENPROJECT_HTTPS: "false"
+      OPENPROJECT_HOST__NAME: doil.me
+      OPENPROJECT_RAILS__RELATIVE__URL__ROOT: /op
+      OPENPROJECT_SECRET_KEY_BASE: "${OPENPROJECT_SECRET_KEY_BASE:?OPENPROJECT_SECRET_KEY_BASE must be set in .env}"
+      OPENPROJECT_DEFAULT__LANGUAGE: ko
+    volumes:
+      - openproject_data:/var/openproject/assets
+      - openproject_pgdata:/var/openproject/pgdata
+    networks:
+      - dev-net
+
   imgproxy:
     image: darthsim/imgproxy:latest
     container_name: imgproxy
@@ -110,3 +195,10 @@ networks:
 
 volumes:
   pgdata:
+  dev_db_data:
+  openproject_data:
+  openproject_pgdata:
+  mattermost_data:
+  mattermost_logs:
+  mattermost_config:
+  mattermost_plugins:

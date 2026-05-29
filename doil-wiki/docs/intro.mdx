@@ -5,12 +5,18 @@ title: 소개 & 개발 이력
 description: 권도일의 서비스 개발 이력 및 기술 스택 정리
 ---
 
+import DevProjects from '@site/src/components/DevProjects';
+
 # 👋 D0il's DEV Gateway
 
 > **hEllo w0rld** — 너비를 추구합니다.  
 > 다양한 기술과 관점을 연결하며 세상의 지평을 확장해가는 개발자입니다.
 
 ---
+
+## 📡 Project Status
+
+<DevProjects />
 
 ## 🙋 About
 
@@ -57,14 +63,78 @@ description: 권도일의 서비스 개발 이력 및 기술 스택 정리
 ### 🔷 SOLUTION & RnD
 
 #### 🏗️ OPTIMIZER
-> 웹 리소스 용량 감소 및 서버/클라이언트 처리 효율 향상을 위한 최적화 & APM 통합 솔루션
+> 웹 리소스 용량 감소 및 서버/클라이언트 처리 효율 향상을 위한 **최적화 & APM 통합 솔루션**
 
 - 최적화 모듈 **단독 개발**
-- Electron 기반 PC용 파일 최적화 앱 (기여도 70%)
-- APM 데이터 수집 연동 모듈 (기여도 90%)
-- 알림 센터 기능 개발 (기여도 80%)
 
 **Stack:** `Java` `PostgreSQL` `Tomcat` `Shell Script` `Node.js` `Electron` `RabbitMQ`
+
+---
+
+##### 💻 PC 버전 (Electron App)
+
+> 웹 서비스 외에, **Electron 기반 데스크탑 앱(PC 버전)** 도 별도 구현.  
+> 브라우저 없이 로컬 환경에서 파일 최적화 작업을 수행할 수 있는 크로스플랫폼 네이티브 앱.
+
+- 파일 드래그 앤 드롭 기반 최적화 작업 처리
+- 로컬 리소스에 직접 접근하여 브라우저 제약 없이 처리
+- Web 버전과 동일한 최적화 엔진 공유 (Node.js 기반)
+- **기여도 70%** — UI 설계 및 Electron 통합 담당
+
+---
+
+##### 📡 APM — Application Performance Monitoring
+
+> `-javaagent` 방식의 **JDBC Hooking** 을 통해 애플리케이션 성능을 비침투적으로 수집하는 APM 모듈. 수집부터 적재까지 전 파이프라인 **단독 설계 및 구현** (기여도 90%).
+
+**수집 구조**
+
+```
+[Target WAS]
+  └─ -javaagent:optimizer-apm.jar
+       └─ JDBC Driver Hooking
+            ├─ SQL 실행 시간 측정
+            ├─ 쿼리 / 파라미터 캡처
+            └─ 메시지 생성 → RabbitMQ Publish
+
+[RabbitMQ Broker]
+  └─ Exchange → Queue → Consumer
+
+[APM Repository Service]
+  └─ 메시지 파싱 및 정규화
+  └─ PostgreSQL 적재
+```
+
+- **JDBC Hooking**: `java.sql.Statement` / `PreparedStatement` 실행 지점을 바이트코드 레벨에서 인터셉트
+- **RabbitMQ 메시지 파이프라인**: 수집 데이터를 비동기 큐로 전송 → Consumer에서 파싱 후 DB 적재
+- **Repository 설계**: 수집 데이터 정규화 및 저장 구조 직접 설계
+- WAS 재배포 없이 `-javaagent` 옵션 추가만으로 모니터링 적용 가능
+
+---
+
+##### 🔔 알림센터 — Notification Center
+
+> 이벤트 정책을 유연하게 정의하고, 조건 충족 시 다채널로 알림을 발송하는 **Event-Driven 알림 인프라** (기여도 80%).
+
+**핵심 컴포넌트**
+
+| 컴포넌트 | 역할 |
+|---|---|
+| **EVENT BRIDGE** | 다중 조건(AND/OR 조합)으로 알림 정책을 정의하고 실시간 트리거 |
+| **DISPATCHER** | 이벤트 큐를 통해 수신 후 UI / 메일 / SMS 등 목적지로 발신 |
+| **DLQ (Dead Letter Queue)** | 발송 실패 알림을 별도 큐로 격리하여 유실 방지 |
+
+**정책 편집기**
+- **1-depth (OR)** + **2-depth (AND)** 복합 조건 블록 구성 지원
+- 드래그 앤 드롭으로 조건 순서 변경 가능
+- **Short-circuit evaluation** — 서브리스트 단위로 조건을 순차 검증하여 불필요한 연산 제거
+- 중복 알림 방지를 위한 **알림 주기(cooldown) 설정** 지원
+
+**DB 설계**
+- `om_notification_mng` — 알림 정책 마스터
+- `om_notification_evt` — 알림 조건 (JSONB `onm_rule_set` / `one_params` 로 복합 조건 저장)
+- `om_notification_log` — 발행 이력 및 읽음 처리
+- 트래픽 급증 등 시스템 레벨 이벤트 감지를 위한 **동적 쿼리 자동 바인딩** 구현
 
 ---
 

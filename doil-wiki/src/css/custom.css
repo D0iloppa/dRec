@@ -28,3 +28,195 @@
   --ifm-color-primary-lightest: #4fddbf;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
 }
+
+/* ── DEV Projects Terminal ──────────────────────────────────── */
+.dev-terminal {
+  background: #0d1117;
+  border-radius: 10px;
+  overflow: hidden;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Menlo', monospace;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  border: 1px solid #30363d;
+  margin: 0 0 2rem;
+}
+
+.dev-titlebar {
+  background: #161b22;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid #30363d;
+}
+
+.dev-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dev-titlebar-label {
+  margin-left: 8px;
+  color: #6e7681;
+  font-size: 0.78rem;
+}
+
+.dev-terminal-body {
+  padding: 1rem 1.4rem 1rem;
+  color: #c9d1d9;
+}
+
+.dev-prompt-line {
+  margin-bottom: 0.8rem;
+}
+
+.dev-prompt {
+  color: #3fb950;
+  font-weight: bold;
+}
+
+.dev-cmd {
+  color: #e6edf3;
+}
+
+.dev-projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-bottom: 0.8rem;
+}
+
+.dev-project-card {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+}
+
+.dev-project-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid #21262d;
+  padding-bottom: 0.4rem;
+}
+
+.dev-project-icon {
+  font-size: 1rem;
+}
+
+.dev-project-name {
+  color: #58a6ff;
+  font-weight: bold;
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.dev-project-name:hover {
+  text-decoration: underline;
+}
+
+.dev-git-link {
+  color: #6e7681;
+  font-size: 0.8rem;
+  text-decoration: none;
+  margin-left: 2px;
+}
+
+.dev-git-link:hover {
+  color: #c9d1d9;
+}
+
+.dev-offline {
+  color: #f85149;
+  font-size: 0.75rem;
+}
+
+.dev-loading {
+  color: #6e7681;
+  font-size: 0.75rem;
+  animation: dev-blink 1s step-end infinite;
+}
+
+.dev-project-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dev-blocker {
+  color: #f85149;
+  font-size: 0.78rem;
+  margin-bottom: 4px;
+  padding: 2px 6px;
+  background: rgba(248, 81, 73, 0.08);
+  border-radius: 3px;
+  border-left: 2px solid #f85149;
+}
+
+.dev-ctx-row {
+  display: flex;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+
+.dev-label {
+  color: #7ee787;
+  min-width: 5ch;
+  flex-shrink: 0;
+}
+
+.dev-value {
+  color: #e6edf3;
+}
+
+.dev-dim {
+  color: #6e7681;
+}
+
+.dev-bars {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dev-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+}
+
+.dev-blocked {
+  color: #f85149;
+  font-size: 0.75rem;
+}
+
+.dev-deploy {
+  margin-top: 6px;
+  font-size: 0.75rem;
+  color: #6e7681;
+}
+
+.dev-cursor-line {
+  margin-top: 0.4rem;
+}
+
+.dev-cursor {
+  color: #3fb950;
+  animation: dev-blink 1s step-end infinite;
+}
+
+@keyframes dev-blink {
+  50% { opacity: 0; }
+}
+
+/* Keep terminal dark in light mode */
+[data-theme='light'] .dev-terminal { background: #0d1117; }
+[data-theme='light'] .dev-titlebar { background: #161b22; }
+[data-theme='light'] .dev-terminal-body { color: #c9d1d9; }
+[data-theme='light'] .dev-project-card { background: #161b22; }

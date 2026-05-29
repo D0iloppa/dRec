@@ -7,6 +7,9 @@ postgres_lsh/
 # SQL dumps
 *.sql
 
+# DKIM keys (secrets)
+postfix/dkim-keys/*.private
+
 # Node modules
 **/node_modules/
 
@@ -40,6 +43,10 @@ Kavita/
 
 # doil-sb (separate repo)
 doil-sb/
+
+# OpenProject (Docker volumes, no local dir needed)
+openproject_data/
+openproject_pgdata/
 
 # Env files
 **/.env

@@ -486,6 +486,11 @@ body.light-mode footer {
   .heroRight {
     align-items: center;
     gap: 2rem;
+    width: 100%;
+  }
+
+  .heroTextContent {
+    width: 100%;
   }
 
   .heroTitle {
@@ -494,20 +499,85 @@ body.light-mode footer {
 
   .cliWindow {
     width: 100%;
-    max-width: 480px;
+    max-width: 560px;
+  }
+
+  .heroSocialLinks {
+    flex-wrap: wrap;
+    justify-content: center;
   }
 }
 
 @media (max-width: 768px) {
+  .container {
+    padding: 0 1.25rem;
+  }
+
+  .heroTitle {
+    font-size: 2rem;
+  }
+
+  .cliWindow {
+    max-width: 100%;
+  }
+
   .serviceGrid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (max-width: 480px) {
+  .container {
+    padding: 0 1rem;
+  }
+
+  .heroWiki {
+    padding: 2rem 0 1.5rem;
+    border-radius: 0 0 24px 24px;
+  }
+
   .heroAvatar {
-    width: 160px;
-    height: 160px;
+    width: 140px;
+    height: 140px;
+  }
+
+  .heroTitle {
+    font-size: 1.6rem;
+    letter-spacing: -0.02em;
+  }
+
+  .heroStatic {
+    font-size: 0.9rem;
+  }
+
+  .cliWindow {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .cliBody {
+    font-size: 0.78rem;
+    padding: 0.45rem 0.75rem;
+  }
+
+  .cliPrompt {
+    font-size: 0.78rem;
+  }
+
+  .heroSocialLinks {
+    gap: 0.4rem;
+  }
+
+  .socialLink {
+    padding: 0.3rem 0.55rem;
+  }
+
+  .socialLinkIcon {
+    font-size: 1rem;
+  }
+
+  .socialLinkLabel {
+    font-size: 0.68rem;
   }
 
   .serviceGrid {

@@ -3,7 +3,8 @@ import {
   FaGithub, FaMotorcycle, FaReact, FaFlask, FaInstagram, FaLinkedin
 } from 'react-icons/fa';
 import {
-  SiNaver, SiSpringboot, SiNotion, SiBuymeacoffee
+  SiNaver, SiSpringboot, SiNotion, SiBuymeacoffee,
+  SiMattermost, SiOpenproject
 } from 'react-icons/si';
 import { RiBookmarkLine } from 'react-icons/ri';
 import './App.css';
@@ -56,6 +57,22 @@ const SERVICES = [
     href: 'https://doiloppa.notion.site/22c3bd6b405d80bab5decf184db29072',
     badge: 'public',
     badgeLabel: 'Public',
+  },
+  {
+    icon: <SiMattermost />,
+    title: 'Mattermost',
+    desc: '내부 메시징 및 파일 공유 채널.',
+    href: '/mm/',
+    badge: 'private',
+    badgeLabel: 'Internal',
+  },
+  {
+    icon: <SiOpenproject />,
+    title: 'OpenProject',
+    desc: '프로젝트 관리 및 이슈 트래킹.',
+    href: '/op/',
+    badge: 'private',
+    badgeLabel: 'Internal',
   },
   {
     icon: <SiSpringboot />,

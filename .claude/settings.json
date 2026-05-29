@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "doil-services": {
+      "command": "node",
+      "args": ["/mnt/c/DEV/docker/doil-sb/mcp/index.js"],
+      "env": {
+        "OPENPROJECT_URL": "https://doil.me",
+        "OPENPROJECT_API_KEY": "",
+        "MATTERMOST_URL": "https://doil.me/mm",
+        "MATTERMOST_TOKEN": ""
+      }
+    }
+  }
+}

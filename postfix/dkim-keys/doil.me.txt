@@ -1,0 +1,3 @@
+mail._domainkey	IN	TXT	( "v=DKIM1; h=sha256; k=rsa; s=email; "
+	  "p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuxKQN8s6nfDWXF2rRgT8YhVsiUkRpEV5PNCLf58YcCM8XqlfnlFo5Dkbe1i3Nfs/LjHcP1GXBMAB2elso9PWw19DiuZbEW0GGioU1dQgesvsnsk+g6rHGV9u5FKU9kjhFjoEeYDJTz40m8eG3iU6Q1JGOYSpCHDB2uMG2yaDjcPxY02cpA+Z2t70kiOLw6m9N8GAtZfZ0+wMb2"
+	  "EZEc0rNWgtoKofveazdFppa5Ew5i4HqhfsKPXWxt9B1lIyTxq1bxgRNMVYxMVZQW3nkQsjGhe1vORnEn5SYGFCFvjj4PErYDzLyDz/0zejYdjzytF49RRaSepPgxUsBBvNtWmFRQIDAQAB" )  ; ----- DKIM key mail for doil.me
