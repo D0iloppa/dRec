@@ -24,6 +24,17 @@ services:
     networks:
       - dev-net
 
+  # doil-app: /sb/app 에서 서빙되는 React SPA (빌더 전용, dist를 nginx/html/sb/app 로 배포)
+  doil-app-builder:
+    build: ./doil-app
+    container_name: doil-app-builder
+    volumes:
+      - ./doil-app:/app
+    profiles:
+      - builder
+    networks:
+      - dev-net
+
   doil-wiki:
     build:
       context: ./doil-wiki
@@ -63,19 +74,24 @@ services:
     networks:
       - dev-net
 
+  # doil-sb BFF (Express). prod: 소스를 이미지에 굽고 node로 직접 실행.
+  # 개발 핫리로드는 docker-compose.dev.yml 오버라이드 참고.
   doil-sb:
     build:
       context: ./doil-sb
-      dockerfile: Dockerfile.dev
-    image: doil-sb:dev
+      dockerfile: Dockerfile
+    image: doil-sb:latest
     container_name: doil-sb
-    working_dir: /app
-    volumes:
-      - ./doil-sb:/app
-    command: npm run dev
-    tty: true
-    stdin_open: true
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - dev-net
 
@@ -159,19 +175,22 @@ services:
     networks:
       - dev-net
 
-  openproject:
-    image: openproject/openproject:15
-    container_name: openproject
+
+  # CouchDB — Obsidian Self-hosted LiveSync 동기화 허브.
+  #   docs.doil.me 로 노출. 각 기기의 네이티브 Obsidian(LiveSync 플러그인)이 여기로 양방향 동기화.
+  #   CORS/요청크기/single_node 설정은 ./couchdb/local.ini 로 주입 (LiveSync 필수).
+  #   관리자 계정은 .env(COUCHDB_USER/PASSWORD) 로 주입.
+  couchdb:
+    image: couchdb:3
+    container_name: couchdb
     restart: unless-stopped
     environment:
-      OPENPROJECT_HTTPS: "false"
-      OPENPROJECT_HOST__NAME: doil.me
-      OPENPROJECT_RAILS__RELATIVE__URL__ROOT: /op
-      OPENPROJECT_SECRET_KEY_BASE: "${OPENPROJECT_SECRET_KEY_BASE:?OPENPROJECT_SECRET_KEY_BASE must be set in .env}"
-      OPENPROJECT_DEFAULT__LANGUAGE: ko
+      COUCHDB_USER: "${COUCHDB_USER:?COUCHDB_USER must be set in .env}"
+      COUCHDB_PASSWORD: "${COUCHDB_PASSWORD:?COUCHDB_PASSWORD must be set in .env}"
     volumes:
-      - openproject_data:/var/openproject/assets
-      - openproject_pgdata:/var/openproject/pgdata
+      - couchdb_data:/opt/couchdb/data
+      # :ro 금지 — couchdb 엔트리포인트가 local.d 를 chown 하므로 rw 여야 부팅됨
+      - ./couchdb/local.ini:/opt/couchdb/etc/local.d/livesync.ini
     networks:
       - dev-net
 
@@ -196,9 +215,9 @@ networks:
 volumes:
   pgdata:
   dev_db_data:
-  openproject_data:
-  openproject_pgdata:
   mattermost_data:
   mattermost_logs:
   mattermost_config:
   mattermost_plugins:
+  plane_data:
+  couchdb_data:
