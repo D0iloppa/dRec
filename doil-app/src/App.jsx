@@ -5,9 +5,10 @@ import Chat from './components/Chat'
 import Mafia from './games/Mafia'
 import Liar from './games/Liar'
 import Wordle from './games/Wordle'
+import Quiz from './games/Quiz'
 import './App.css'
 
-const VIEWS = { mafia: Mafia, liar: Liar, wordle: Wordle }
+const VIEWS = { mafia: Mafia, liar: Liar, wordle: Wordle, quiz: Quiz }
 const PHASE_LABEL = {
   lobby: '대기실', night: '🌙 밤', day: '☀️ 낮',
   describe: '🗣️ 토론', vote: '🗳️ 투표', liarGuess: '😈 추리', playing: '진행 중', ended: '종료',

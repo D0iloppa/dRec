@@ -4,12 +4,20 @@ import {
 } from 'react-icons/fa';
 import {
   SiNaver, SiSpringboot, SiNotion, SiBuymeacoffee,
-  SiMattermost, SiOpenproject
+  SiMattermost, SiObsidian
 } from 'react-icons/si';
 import { RiBookmarkLine } from 'react-icons/ri';
 import './App.css';
 
 const SERVICES = [
+  {
+    icon: '🎮',
+    title: 'DOPL',
+    desc: '실시간 멀티플레이 게임 플랫폼 (doil playground).',
+    href: 'https://dopl.doil.me/',
+    badge: 'public',
+    badgeLabel: 'Public',
+  },
   {
     icon: '🐳',
     title: 'SandBox Page',
@@ -43,6 +51,22 @@ const SERVICES = [
     badgeLabel: 'Public',
   },
   {
+    icon: '✈️',
+    title: 'Plane',
+    desc: '프로젝트 관리 및 이슈 트래킹.',
+    href: 'https://plane.doil.me/',
+    badge: 'private',
+    badgeLabel: 'Internal',
+  },
+  {
+    icon: <SiObsidian />,
+    title: 'Obsidian Sync',
+    desc: 'LiveSync 동기화 서버 (CouchDB). 각 기기 네이티브 앱이 여기로 동기화.',
+    href: 'https://docs.doil.me/_utils/',
+    badge: 'private',
+    badgeLabel: 'Internal',
+  },
+  {
     icon: <RiBookmarkLine />,
     title: 'Doybrary',
     desc: '알렉산드리아 도서관',
@@ -63,14 +87,6 @@ const SERVICES = [
     title: 'Mattermost',
     desc: '내부 메시징 및 파일 공유 채널.',
     href: '/mm/',
-    badge: 'private',
-    badgeLabel: 'Internal',
-  },
-  {
-    icon: <SiOpenproject />,
-    title: 'OpenProject',
-    desc: '프로젝트 관리 및 이슈 트래킹.',
-    href: '/op/',
     badge: 'private',
     badgeLabel: 'Internal',
   },

@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.local
+
+# 레퍼런스 스크린샷 등 스크래치
+_tmp/

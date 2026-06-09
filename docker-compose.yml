@@ -24,6 +24,28 @@ services:
     networks:
       - dev-net
 
+  # dopl-server: DOPL 게임 플랫폼 백엔드 (Express + Socket.IO, dopl 모노레포)
+  dopl-server:
+    build:
+      context: ./dopl
+      dockerfile: Dockerfile
+    image: dopl-server:latest
+    container_name: dopl-server
+    environment:
+      - NODE_ENV=production
+      - PORT=3100
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=dopl
+      - DB_PASSWORD=${DOPL_DB_PASSWORD:-dopldevpw2026}
+      - DB_NAME=dev
+      - JWT_SECRET=${DOPL_JWT_SECRET:-change-this-in-prod}
+    depends_on:
+      - db
+    restart: unless-stopped
+    networks:
+      - dev-net
+
   # doil-app: /sb/app 에서 서빙되는 React SPA (빌더 전용, dist를 nginx/html/sb/app 로 배포)
   doil-app-builder:
     build: ./doil-app
@@ -85,6 +107,13 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=doil
+      - DB_PASSWORD=doildev1!
+      - DB_NAME=dev
+    depends_on:
+      - db
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]

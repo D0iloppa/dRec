@@ -1,0 +1,19 @@
+{
+  "name": "dopl",
+  "private": true,
+  "version": "0.0.0",
+  "description": "DOPL — doil-playground 게임 플랫폼 모노레포",
+  "workspaces": [
+    "packages/*",
+    "packages/games/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "typescript": "^5.7.3"
+  }
+}

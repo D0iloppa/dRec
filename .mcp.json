@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "doil-mcp": {
+      "command": "node",
+      "args": ["doil-sb/mcp/index.js"]
+    }
+  }
+}
