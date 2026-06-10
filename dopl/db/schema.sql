@@ -75,10 +75,31 @@ CREATE TABLE IF NOT EXISTS quiz_text_question (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- 배경음악 메타. key = 클라이언트/씬이 참조하는 링크 키 (예: lobby, shop, mafiaDay).
+-- 파일은 client public/bgm/<file>로 배포되고, 클라는 이 메타를 기준으로 연결한다 (하드코딩 금지).
+CREATE TABLE IF NOT EXISTS bgm_track (
+  key     TEXT PRIMARY KEY,
+  title   TEXT NOT NULL,
+  descr   TEXT NOT NULL DEFAULT '',
+  file    TEXT NOT NULL,
+  sort    INTEGER NOT NULL DEFAULT 0,
+  enabled BOOLEAN NOT NULL DEFAULT true
+);
+
 -- 꼬들(한글 워들) 데일리 단어 풀. 2음절·자모 6개 단어만 (시드에서 보장).
 CREATE TABLE IF NOT EXISTS wordle_word (
   id   SERIAL PRIMARY KEY,
   word TEXT UNIQUE NOT NULL
+);
+
+-- 친구 관계. pending = requester가 addressee에게 요청한 상태, accepted = 친구.
+CREATE TABLE IF NOT EXISTS friendship (
+  requester_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  addressee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status       TEXT NOT NULL DEFAULT 'pending',
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (requester_id, addressee_id),
+  CHECK (requester_id <> addressee_id)
 );
 
 -- 미니게임 결과 (유저당 퍼즐 1회 기록 — 보상 중복 지급 방지).

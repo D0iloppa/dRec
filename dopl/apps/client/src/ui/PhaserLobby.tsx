@@ -3,6 +3,8 @@ import { useEffect, useRef } from 'react';
 import Phaser from 'phaser';
 import type { Socket } from 'socket.io-client';
 import { LobbyScene } from '../scenes/LobbyScene';
+import { ShopScene } from '../scenes/ShopScene';
+import { DressScene } from '../scenes/DressScene';
 
 export default function PhaserLobby({
   socket, games, profile, token, onLogout, refreshProfile,
@@ -23,7 +25,8 @@ export default function PhaserLobby({
       backgroundColor: '#0b3a5b',
       dom: { createContainer: true },
       scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.NO_CENTER },
-      scene: new LobbyScene(),
+      // 로비/상점/분장실 — 같은 게임 인스턴스 안에서 씬 전환(별도 페이지)
+      scene: [new LobbyScene(), new ShopScene(), new DressScene()],
     });
     game.registry.set('socket', socket);
     game.registry.set('games', games);

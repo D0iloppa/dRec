@@ -2,6 +2,7 @@
 // 이후 게임 씬들의 참고 템플릿.
 import Phaser from 'phaser';
 import type { RoomState } from '@dopl/protocol';
+import { avatarTexture } from '../../avatarTexture';
 
 export class OxScene extends Phaser.Scene {
   sendAction!: (a: { kind: string; value?: boolean }) => void;
@@ -112,13 +113,23 @@ export class OxScene extends Phaser.Scene {
       const x = 36 + (i % 8) * 66;
       const y = this.scale.height - 50 - Math.floor(i / 8) * 52;
       const alive = p.alive !== false;
-      const circ = this.add.circle(x, y, 16, 0x334155, alive ? 1 : 0.3);
-      if (g.stage === 'answer' && p.answered) circ.setStrokeStyle(3, 0xfacc15);
-      const face = this.add.text(x, y, alive ? '🙂' : '💀', { fontSize: '16px' }).setOrigin(0.5);
+      const ring = this.add.circle(x, y, 20, 0x000000, 0);
+      if (g.stage === 'answer' && p.answered) ring.setStrokeStyle(3, 0xfacc15);
+      this.tokens.add(ring);
+      // 꾸민 캐릭터 노출 (텍스처 준비 전엔 원형 폴백)
+      const texKey = avatarTexture(this, (p as any).avatar, () => this.render());
+      if (texKey) {
+        const img = this.add.image(x, y, texKey).setDisplaySize(28, 37);
+        if (!alive) { img.setAlpha(0.35); img.setTint(0x9aa7b5); }
+        this.tokens.add(img);
+      } else {
+        this.tokens.add(this.add.circle(x, y, 14, 0x334155, alive ? 0.9 : 0.3));
+      }
+      if (!alive) this.tokens.add(this.add.text(x, y, '💀', { fontSize: '14px' }).setOrigin(0.5));
       const nm = this.add
-        .text(x, y + 20, p.name + (p.id === s.myId ? '(나)' : ''), { fontSize: '10px', color: '#cbd5e1' })
+        .text(x, y + 24, p.name + (p.id === s.myId ? '(나)' : ''), { fontSize: '10px', color: '#cbd5e1' })
         .setOrigin(0.5);
-      this.tokens.add([circ, face, nm]);
+      this.tokens.add(nm);
     });
   }
 }

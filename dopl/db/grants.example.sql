@@ -14,7 +14,10 @@ GRANT USAGE ON SCHEMA public TO dopl;
 GRANT SELECT, INSERT, UPDATE, DELETE ON users, user_profile, user_wallet TO dopl;
 GRANT SELECT ON quiz_question, quiz_mc_question, quiz_text_question TO dopl;
 GRANT SELECT ON wordle_word TO dopl;
+GRANT SELECT ON bgm_track TO dopl;
 GRANT SELECT, INSERT ON mini_result TO dopl;
+-- 친구 관계: 읽기·쓰기
+GRANT SELECT, INSERT, UPDATE, DELETE ON friendship TO dopl;
 GRANT SELECT ON dev_config TO dopl;
 GRANT SELECT ON item TO dopl;
 GRANT SELECT, INSERT, DELETE ON user_inventory TO dopl;

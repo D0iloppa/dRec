@@ -9,8 +9,8 @@ async function req(path: string, opts: RequestInit = {}): Promise<any> {
   return data;
 }
 
-export const signup = (username: string, password: string, nickname?: string) =>
-  req('/auth/signup', { method: 'POST', body: JSON.stringify({ username, password, nickname }) });
+export const signup = (username: string, password: string, nickname?: string, gender?: string) =>
+  req('/auth/signup', { method: 'POST', body: JSON.stringify({ username, password, nickname, gender }) });
 export const login = (username: string, password: string) =>
   req('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) });
 export const getProfile = (token: string) =>
@@ -23,5 +23,17 @@ export const getInventory = (token: string) =>
   req('/shop/inventory', { headers: { authorization: 'Bearer ' + token } });
 export const buyItem = (token: string, itemId: number) =>
   req('/shop/buy', { method: 'POST', headers: { authorization: 'Bearer ' + token }, body: JSON.stringify({ itemId }) });
-export const equipAvatar = (token: string, equipped: Record<string, string>) =>
-  req('/profile/equip', { method: 'PUT', headers: { authorization: 'Bearer ' + token }, body: JSON.stringify({ equipped }) });
+export const getPublicProfile = (token: string, nickname: string) =>
+  req('/profile/of/' + encodeURIComponent(nickname), { headers: { authorization: 'Bearer ' + token } });
+export const getFriends = (token: string) =>
+  req('/friends', { headers: { authorization: 'Bearer ' + token } });
+export const friendRequest = (token: string, nickname: string) =>
+  req('/friends/request', { method: 'POST', headers: { authorization: 'Bearer ' + token }, body: JSON.stringify({ nickname }) });
+export const friendAccept = (token: string, nickname: string) =>
+  req('/friends/accept', { method: 'POST', headers: { authorization: 'Bearer ' + token }, body: JSON.stringify({ nickname }) });
+export const friendDecline = (token: string, nickname: string) =>
+  req('/friends/decline', { method: 'POST', headers: { authorization: 'Bearer ' + token }, body: JSON.stringify({ nickname }) });
+export const friendRemove = (token: string, nickname: string) =>
+  req('/friends/' + encodeURIComponent(nickname), { method: 'DELETE', headers: { authorization: 'Bearer ' + token } });
+export const equipAvatar = (token: string, equipped: Record<string, string>, base?: number) =>
+  req('/profile/equip', { method: 'PUT', headers: { authorization: 'Bearer ' + token }, body: JSON.stringify({ equipped, base }) });

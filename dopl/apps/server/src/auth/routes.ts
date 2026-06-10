@@ -9,8 +9,10 @@ import { requireAuth, type AuthedRequest } from './middleware.js';
 export const authRouter = express.Router();
 
 authRouter.post('/signup', async (req, res) => {
-  const { username, password, nickname } = req.body ?? {};
+  const { username, password, nickname, gender } = req.body ?? {};
   const nick = typeof nickname === 'string' && nickname.trim() ? nickname.trim().slice(0, 20) : username;
+  // 캐릭터 성별 — 가입 시 1회 선택(고정). 캐릭터 베이스/착용샷이 성별별로 다르다.
+  const g = gender === 'f' ? 'f' : 'm';
   if (!username || !password) {
     res.status(400).json({ error: 'username과 password가 필요합니다.' });
     return;
@@ -29,8 +31,12 @@ authRouter.post('/signup', async (req, res) => {
       [username, hash]
     );
     const u = rows[0];
-    // 가입 시 프로필(닉네임=username, 기본 아바타)과 지갑을 함께 생성
-    await client.query('INSERT INTO user_profile(user_id, nickname) VALUES($1, $2)', [u.id, nick]);
+    // 가입 시 프로필(닉네임, 성별 캐릭터 + 빈 착용)과 지갑을 함께 생성
+    await client.query('INSERT INTO user_profile(user_id, nickname, avatar) VALUES($1, $2, $3)', [
+      u.id,
+      nick,
+      JSON.stringify({ gender: g, base: 1, equipped: {} }),
+    ]);
     await client.query('INSERT INTO user_wallet(user_id) VALUES($1)', [u.id]);
     await client.query('COMMIT');
     res.json({ token: signToken({ uid: u.id, username: u.username }), user: { id: u.id, username: u.username } });

@@ -4,12 +4,14 @@ import type { GamePackage } from '@dopl/core';
 import { oxQuizPackage } from '@dopl/game-ox-quiz';
 import { commonQuizPackage } from '@dopl/game-common-quiz';
 import { speedQuizPackage } from '@dopl/game-speed-quiz';
+import { mafiaPackage } from '@dopl/game-mafia';
 import { pool } from './db.js';
 
 export const registry: Record<string, GamePackage> = {
   [oxQuizPackage.meta.type]: oxQuizPackage,
   [commonQuizPackage.meta.type]: commonQuizPackage,
   [speedQuizPackage.meta.type]: speedQuizPackage,
+  [mafiaPackage.meta.type]: mafiaPackage,
 };
 
 export const gameList = Object.values(registry).map((g) => g.meta);

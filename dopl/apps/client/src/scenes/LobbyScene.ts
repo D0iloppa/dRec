@@ -2,10 +2,12 @@
 // 방 목록 테이블(대기중/게임중) · 접속자 패널(LV/IQ) · 로비 전체 채팅 · 하단 기능 바(미니게임/꾸미기·상점/게임방법/EXIT).
 // 골격은 1회 렌더(채팅 입력 포커스 유지), 데이터 영역만 부분 갱신.
 import Phaser from 'phaser';
-import { avatarSvg } from '../avatar';
+import { avatarImgHtml } from '../avatarRender';
 import { addCartoonBackdrop } from '../backdrop';
 import { levelOf } from '../level';
 import { MINIGAMES, type Minigame } from '../minigames';
+import { bgm } from '../bgm';
+import { profileCardHtml } from '../profileCard';
 import * as api from '../api';
 
 interface LobbyData {
@@ -13,19 +15,25 @@ interface LobbyData {
   users: { nickname: string; iq: number | null; xp?: number; avatar: { equipped?: Record<string, string> } | null }[];
   chat: { name: string; text: string; ts: number }[];
 }
-interface ShopItem { id: number; code: string; name: string; slot: string; price: number; rarity: string }
-
-const SLOT_TABS: [string, string][] = [
-  ['body', '🧍 피부'], ['face', '🙂 표정'], ['hair', '💇 헤어'], ['top', '👕 상의'], ['acc', '🎀 소품'],
-];
-const RARITY_COLOR: Record<string, string> = { common: '#64748b', rare: '#2563eb', epic: '#9333ea' };
+// 게임 카탈로그 카드 설명 (키비주얼: /games/<type>.png)
+const GAME_DESC: Record<string, string> = {
+  'ox-quiz': 'O? X? 골라서 살아남는 서바이벌 퀴즈',
+  'common-quiz': '4지선다 상식 퀴즈 — 틀리면 탈락!',
+  'speed-quiz': '채팅 타이핑 선착 정답! 초성 힌트까지',
+  'mafia': '밤과 낮, 거짓말쟁이를 찾아라',
+};
 
 export class LobbyScene extends Phaser.Scene {
   private dom!: Phaser.GameObjects.DOMElement;
   private lobbyData: LobbyData = { rooms: [], users: [], chat: [] };
   private creating = false;
+  private createType = '';
   private viewUser: LobbyData['users'][number] | null = null;
   private helpOpen = false;
+  private jukeOpen = false;
+  private friendsOpen = false;
+  private friendsData: { friends: any[]; received: any[]; sent: any[] } | null = null;
+  private friendsMsg = '';
   private miniList = false;
   private miniGame: Minigame | null = null;
 
@@ -36,20 +44,13 @@ export class LobbyScene extends Phaser.Scene {
   private onLogout: () => void = () => {};
   private refreshProfile: () => void = () => {};
 
-  // 꾸미기&상점 상태
-  private dressOpen = false;
-  private dressTab = 'body';
-  private items: ShopItem[] = [];
-  private owned = new Set<string>();
-  private draft: Record<string, string> = {};
-  private dressMsg = '';
-
   constructor() {
     super('lobby');
   }
 
   create() {
     addCartoonBackdrop(this);
+    bgm.play('lobby');
     this.socket = this.game.registry.get('socket');
     this.games = this.game.registry.get('games') ?? [];
     this.profile = this.game.registry.get('profile');
@@ -60,14 +61,13 @@ export class LobbyScene extends Phaser.Scene {
     this.dom = this.add.dom(this.scale.width / 2, this.scale.height / 2).createFromHTML('<div class="lb"></div>');
     this.scale.on('resize', () => this.dom.setPosition(this.scale.width / 2, this.scale.height / 2));
 
-    const onLobby = (d: LobbyData) => { this.lobbyData = { chat: [], ...d }; this.updateData(); };
+    const onLobby = (d: LobbyData) => { this.lobbyData = { ...d, chat: d.chat ?? [] }; this.updateData(); };
     this.socket.on('lobby', onLobby);
 
     const onReg = () => {
       this.games = this.game.registry.get('games') ?? [];
       this.profile = this.game.registry.get('profile');
       this.updateData();
-      if (this.dressOpen) this.renderModal();
     };
     this.game.registry.events.on('changedata-games', onReg);
     this.game.registry.events.on('changedata-profile', onReg);
@@ -132,8 +132,12 @@ export class LobbyScene extends Phaser.Scene {
         </footer>
         <nav class="lb-bottombar">
           <button id="lbMini" class="lb-fn">🎯 미니게임</button>
-          <button id="lbDress" class="lb-fn">👕 꾸미기·상점</button>
+          <button id="lbShop" class="lb-fn">🛍 상점</button>
+          <button id="lbDressRoom" class="lb-fn">👗 분장실</button>
+          <button id="lbFriends" class="lb-fn">👥 친구</button>
+          <button id="lbJuke" class="lb-fn">🎵 쥬크박스</button>
           <button id="lbHelp" class="lb-fn">📖 게임 방법</button>
+          <button id="lbBgm" class="lb-fn">${bgm.enabled() ? '🔊 음악 켬' : '🔇 음악 끔'}</button>
           <span class="lb-spacer"></span>
           <button id="lbExit" class="lb-btn lb-btn-red lb-exit">EXIT</button>
         </nav>
@@ -141,10 +145,22 @@ export class LobbyScene extends Phaser.Scene {
       </div>`;
 
     this.$('lbExit')?.addEventListener('click', () => this.onLogout());
-    this.$('lbMake')?.addEventListener('click', () => { this.creating = true; this.renderModal(); });
-    this.$('lbDress')?.addEventListener('click', () => void this.openDress());
+    this.$('lbMake')?.addEventListener('click', () => {
+      this.creating = true;
+      this.createType = this.games[0]?.type ?? '';
+      this.renderModal();
+    });
+    this.$('lbShop')?.addEventListener('click', () => this.scene.start('shop'));
+    this.$('lbDressRoom')?.addEventListener('click', () => this.scene.start('dress'));
     this.$('lbMini')?.addEventListener('click', () => { this.miniList = true; this.renderModal(); });
+    this.$('lbJuke')?.addEventListener('click', () => { this.jukeOpen = true; this.renderModal(); });
+    this.$('lbFriends')?.addEventListener('click', () => void this.openFriends());
     this.$('lbHelp')?.addEventListener('click', () => { this.helpOpen = true; this.renderModal(); });
+    this.$('lbBgm')?.addEventListener('click', () => {
+      const on = bgm.toggle();
+      const btn = this.$('lbBgm');
+      if (btn) btn.textContent = on ? '🔊 음악 켬' : '🔇 음악 끔';
+    });
     this.$('lbChatForm')?.addEventListener('submit', (e) => {
       e.preventDefault();
       const input = this.$('lbChatInput') as HTMLInputElement;
@@ -162,10 +178,9 @@ export class LobbyScene extends Phaser.Scene {
   private updateData() {
     if (!this.$('lbMe')) return;
     const me = this.profile;
-    const eq = me?.profile?.avatar?.equipped ?? {};
     const lv = levelOf(me?.profile?.xp);
     this.$('lbMe')!.innerHTML = `
-      <span class="lb-me-ava">${avatarSvg(eq)}</span>
+      <span class="lb-me-ava">${avatarImgHtml(me?.profile?.avatar ?? {})}</span>
       <span class="lb-me-info"><b><span class="lb-lv">Lv.${lv}</span> ${this.esc(me?.profile?.nickname ?? '플레이어')}</b>
       <small>🧠 ${me?.profile?.iq ?? '-'} · 🪙 ${me?.wallet?.coins ?? 0}</small></span>`;
 
@@ -198,7 +213,7 @@ export class LobbyScene extends Phaser.Scene {
       .map(
         (u, i) => `
         <li class="lb-user" data-idx="${i}">
-          <span class="lb-user-ava">${avatarSvg(u.avatar?.equipped ?? {})}</span>
+          <span class="lb-user-ava">${avatarImgHtml(u.avatar ?? {})}</span>
           <span class="lb-user-nick">${this.esc(u.nickname)}</span>
           <span class="lb-user-meta"><span class="lb-lv">Lv.${levelOf(u.xp)}</span><span class="lb-user-iq">IQ ${u.iq ?? '-'}</span></span>
         </li>`
@@ -225,9 +240,10 @@ export class LobbyScene extends Phaser.Scene {
   private renderModal() {
     const host = this.$('lbModal')!;
     if (this.creating) host.innerHTML = this.createRoomHtml();
-    else if (this.dressOpen) host.innerHTML = this.dressHtml();
     else if (this.miniGame) host.innerHTML = this.miniGameHtml();
     else if (this.miniList) host.innerHTML = this.miniListHtml();
+    else if (this.jukeOpen) host.innerHTML = this.jukeHtml();
+    else if (this.friendsOpen) host.innerHTML = this.friendsHtml();
     else if (this.helpOpen) host.innerHTML = this.helpHtml();
     else if (this.viewUser) host.innerHTML = this.profileHtml();
     else { host.innerHTML = ''; return; }
@@ -240,27 +256,46 @@ export class LobbyScene extends Phaser.Scene {
     this.dom.setPosition(this.scale.width / 2, this.scale.height / 2);
   }
 
+  // 방 만들기 — 게임 카탈로그 (키비주얼 카드에서 선택)
   private createRoomHtml() {
+    const cards = this.games
+      .map(
+        (g) => `
+        <div class="gc-card ${this.createType === g.type ? 'sel' : ''}" data-type="${g.type}">
+          <div class="gc-img"><img src="/games/${g.type}.png" alt="" draggable="false" onerror="this.parentElement.classList.add('noimg')"></div>
+          <div class="gc-info">
+            <b>${this.esc(g.label)}</b>
+            <small>${this.esc(GAME_DESC[g.type] ?? '')}</small>
+            <span class="gc-players">👥 ${g.minPlayers}~${g.maxPlayers}명</span>
+          </div>
+          <span class="gc-check">✔</span>
+        </div>`
+      )
+      .join('');
     return `
       <div class="modal-bg" id="mBg">
-        <div class="modal lb-modal">
-          <h3>방 만들기</h3>
-          <select id="cType">${this.games.map((g) => `<option value="${g.type}">${this.esc(g.label)} (${g.minPlayers}~${g.maxPlayers}명)</option>`).join('')}</select>
-          <input id="cTitle" placeholder="방 제목 (선택)" maxlength="30">
-          <div class="modal-btns"><button id="mCancel" class="btn-ghost">취소</button><button id="cMake" class="btn-primary">만들기</button></div>
+        <div class="mini-panel gamecat-panel">
+          <header class="dx-head"><b>🎮 방 만들기</b><span class="dx-sub">어떤 게임으로 모일까요?</span><button id="mCancel" class="dx-close">✕</button></header>
+          <div class="gc-grid">${cards}</div>
+          <footer class="dx-foot gc-foot">
+            <input id="cTitle" placeholder="방 제목 (선택)" maxlength="30">
+            <button id="cMake" class="lb-btn lb-btn-green">이 게임으로 방 만들기</button>
+          </footer>
         </div>
       </div>`;
   }
 
   private profileHtml() {
     const u = this.viewUser!;
+    const isMe = u.nickname === this.profile?.profile?.nickname;
     return `
       <div class="modal-bg" id="mBg">
         <div class="modal lb-modal profile-modal">
-          <div class="prof-ava">${avatarSvg(u.avatar?.equipped ?? {})}</div>
-          <h3><span class="lb-lv">Lv.${levelOf(u.xp)}</span> ${this.esc(u.nickname)}</h3>
-          <div class="prof-iq">🧠 IQ ${u.iq ?? '-'}</div>
-          <button id="mCancel" class="btn-primary">닫기</button>
+          ${profileCardHtml({ nickname: u.nickname, iq: u.iq, xp: u.xp, avatar: u.avatar })}
+          <div class="modal-btns">
+            ${isMe ? '' : `<button id="pAddFr" class="btn-ghost" data-nick="${this.esc(u.nickname)}">➕ 친구 요청</button>`}
+            <button id="mCancel" class="btn-primary">닫기</button>
+          </div>
         </div>
       </div>`;
   }
@@ -298,6 +333,88 @@ export class LobbyScene extends Phaser.Scene {
       </div>`;
   }
 
+  // 친구 — 목록/받은·보낸 요청/닉네임으로 추가
+  private async openFriends() {
+    this.friendsOpen = true;
+    this.friendsMsg = '';
+    try {
+      this.friendsData = await api.getFriends(this.token);
+    } catch (e) {
+      this.friendsData = null;
+      this.friendsMsg = (e as Error).message;
+    }
+    this.renderModal();
+  }
+
+  private friendsHtml() {
+    const d = this.friendsData ?? { friends: [], received: [], sent: [] };
+    const friendRow = (f: any) => `
+      <div class="fr-row">
+        <span class="fr-ava">${avatarImgHtml(f.avatar ?? {})}</span>
+        <span class="fr-dot ${f.online ? 'on' : ''}"></span>
+        <span class="fr-nick"><span class="lb-lv">Lv.${levelOf(f.xp)}</span> ${this.esc(f.nickname)}</span>
+        <button class="fr-btn fr-del" data-nick="${this.esc(f.nickname)}">삭제</button>
+      </div>`;
+    const recvRow = (f: any) => `
+      <div class="fr-row">
+        <span class="fr-ava">${avatarImgHtml(f.avatar ?? {})}</span>
+        <span class="fr-nick">${this.esc(f.nickname)}</span>
+        <button class="fr-btn fr-accept" data-nick="${this.esc(f.nickname)}">수락</button>
+        <button class="fr-btn fr-decline" data-nick="${this.esc(f.nickname)}">거절</button>
+      </div>`;
+    const sentRow = (f: any) => `
+      <div class="fr-row">
+        <span class="fr-ava">${avatarImgHtml(f.avatar ?? {})}</span>
+        <span class="fr-nick">${this.esc(f.nickname)}</span>
+        <span class="fr-wait">대기 중…</span>
+        <button class="fr-btn fr-del" data-nick="${this.esc(f.nickname)}">취소</button>
+      </div>`;
+    return `
+      <div class="modal-bg" id="mBg">
+        <div class="mini-panel fr-panel">
+          <header class="dx-head"><b>👥 친구</b><button id="mCancel" class="dx-close">✕</button></header>
+          <div class="fr-body">
+            <form id="frAddForm" class="fr-add">
+              <input id="frAddInput" placeholder="친구 닉네임 입력" maxlength="20" autocomplete="off">
+              <button type="submit" class="lb-btn lb-btn-green">➕ 친구 요청</button>
+            </form>
+            <div class="dx-msg">${this.esc(this.friendsMsg)}</div>
+            ${d.received.length ? `<h4>📥 받은 요청 (${d.received.length})</h4>${d.received.map(recvRow).join('')}` : ''}
+            <h4>친구 (${d.friends.length})</h4>
+            ${d.friends.map(friendRow).join('') || '<div class="lb-empty">아직 친구가 없어요. 닉네임으로 요청해 보세요!</div>'}
+            ${d.sent.length ? `<h4>📤 보낸 요청 (${d.sent.length})</h4>${d.sent.map(sentRow).join('')}` : ''}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // 쥬크박스 — DB 메타(bgm.list) 기반 OST 플레이리스트
+  private jukeHtml() {
+    const cur = bgm.current();
+    const rows = bgm
+      .list()
+      .map(
+        (t) => `
+        <div class="juke-row ${cur === t.key ? 'on' : ''}" data-key="${t.key}">
+          <input type="checkbox" class="juke-chk" data-key="${t.key}">
+          <div class="juke-info"><b>${this.esc(t.title)}</b><small>${this.esc(t.desc)}</small></div>
+          <button class="juke-play lb-btn lb-btn-green" data-key="${t.key}">▶</button>
+        </div>`
+      )
+      .join('');
+    return `
+      <div class="modal-bg" id="mBg">
+        <div class="mini-panel juke-panel">
+          <header class="dx-head"><b>🎵 쥬크박스</b><span class="dx-sub">DOPL OST — 골라 듣는 배경음악</span><button id="mCancel" class="dx-close">✕</button></header>
+          <div class="juke-list">${rows || '<div class="lb-empty">트랙 정보를 불러오지 못했어요</div>'}</div>
+          <footer class="dx-foot">
+            <button id="jukeQueue" class="lb-btn lb-btn-amber">☑ 선택한 곡 이어듣기</button>
+            <button id="jukeStop" class="lb-btn lb-btn-green">로비 음악으로 돌아가기</button>
+          </footer>
+        </div>
+      </div>`;
+  }
+
   private helpHtml() {
     return `
       <div class="modal-bg" id="mBg">
@@ -317,64 +434,15 @@ export class LobbyScene extends Phaser.Scene {
       </div>`;
   }
 
-  private dressHtml() {
-    const coins = this.profile?.wallet?.coins ?? 0;
-    const tabs = SLOT_TABS.map(
-      ([slot, label]) => `<button class="dx-tab ${this.dressTab === slot ? 'on' : ''}" data-slot="${slot}">${label}</button>`
-    ).join('');
-    const slotItems = this.items.filter((i) => i.slot === this.dressTab);
-    const cards = slotItems
-      .map((it) => {
-        const isOwned = this.owned.has(it.code) || it.price === 0;
-        const equippedNow = this.draft[it.slot] === it.code;
-        const preview = avatarSvg({ ...this.draft, [it.slot]: it.code });
-        const badge = equippedNow
-          ? '<span class="dx-badge on">장착중</span>'
-          : isOwned
-            ? '<span class="dx-badge own">보유</span>'
-            : `<span class="dx-badge price">🪙 ${it.price}</span>`;
-        return `
-        <div class="dx-card ${equippedNow ? 'sel' : ''}" data-code="${it.code}" data-owned="${isOwned ? 1 : 0}" data-id="${it.id}">
-          <div class="dx-prev">${preview}</div>
-          <div class="dx-name" style="color:${RARITY_COLOR[it.rarity] ?? '#333'}">${this.esc(it.name)}</div>
-          ${badge}
-        </div>`;
-      })
-      .join('');
-    return `
-      <div class="modal-bg" id="mBg">
-        <div class="dx">
-          <header class="dx-head">
-            <b>👕 꾸미기 & 상점</b>
-            <span class="dx-coins">🪙 ${coins}</span>
-            <button id="mCancel" class="dx-close">✕</button>
-          </header>
-          <div class="dx-body">
-            <div class="dx-preview-pane">
-              <div class="dx-big">${avatarSvg(this.draft)}</div>
-              <b>${this.esc(this.profile?.profile?.nickname ?? '')}</b>
-            </div>
-            <div class="dx-right">
-              <div class="dx-tabs">${tabs}</div>
-              <div class="dx-grid">${cards || '<div class="lb-empty">아이템이 없습니다</div>'}</div>
-            </div>
-          </div>
-          <footer class="dx-foot">
-            <span class="dx-msg">${this.esc(this.dressMsg)}</span>
-            <button id="dxSave" class="lb-btn lb-btn-green">저장 (장착 적용)</button>
-          </footer>
-        </div>
-      </div>`;
-  }
-
   private wireModal() {
     const host = this.$('lbModal')!;
     const close = () => {
       this.creating = false;
       this.viewUser = null;
-      this.dressOpen = false;
-      this.dressMsg = '';
       this.helpOpen = false;
+      this.jukeOpen = false;
+      this.friendsOpen = false;
+      this.friendsMsg = '';
       this.miniList = false;
       this.miniGame = null;
       this.renderModal();
@@ -382,11 +450,75 @@ export class LobbyScene extends Phaser.Scene {
     host.querySelector('#mCancel')?.addEventListener('click', close);
     host.querySelector('#mBg')?.addEventListener('click', (e) => { if ((e.target as HTMLElement).id === 'mBg') close(); });
 
+    // 카탈로그 카드 선택 — 제목 입력 보존 위해 재렌더 없이 클래스만 갱신
+    host.querySelectorAll('.gc-card').forEach((el) =>
+      el.addEventListener('click', () => {
+        this.createType = (el as HTMLElement).dataset.type!;
+        host.querySelectorAll('.gc-card').forEach((c) =>
+          c.classList.toggle('sel', (c as HTMLElement).dataset.type === this.createType)
+        );
+      })
+    );
     host.querySelector('#cMake')?.addEventListener('click', () => {
-      const type = (host.querySelector('#cType') as HTMLSelectElement)?.value;
       const title = (host.querySelector('#cTitle') as HTMLInputElement)?.value;
-      this.socket.emit('createRoom', { type, title });
+      this.socket.emit('createRoom', { type: this.createType, title });
       close();
+    });
+
+    // 프로필 카드의 친구 요청 버튼
+    const pAdd = host.querySelector('#pAddFr') as HTMLButtonElement | null;
+    pAdd?.addEventListener('click', () => {
+      api.friendRequest(this.token, pAdd.dataset.nick!)
+        .then((r) => { pAdd.textContent = r.accepted ? '✅ 친구가 됐어요!' : '✅ 요청 보냄'; pAdd.disabled = true; })
+        .catch((err) => { pAdd.textContent = err.message; pAdd.disabled = true; });
+    });
+
+    // 친구 — 요청/수락/거절/삭제 후 목록 갱신
+    const reloadFriends = () => void this.openFriends();
+    host.querySelector('#frAddForm')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = host.querySelector('#frAddInput') as HTMLInputElement;
+      const nickname = input.value.trim();
+      if (!nickname) return;
+      api.friendRequest(this.token, nickname)
+        .then((r) => { this.friendsMsg = r.accepted ? '서로 요청해서 바로 친구가 됐어요!' : '요청을 보냈습니다!'; reloadFriends(); })
+        .catch((err) => { this.friendsMsg = err.message; this.renderModal(); });
+    });
+    host.querySelectorAll('.fr-accept').forEach((el) =>
+      el.addEventListener('click', () =>
+        api.friendAccept(this.token, (el as HTMLElement).dataset.nick!).then(reloadFriends).catch(() => {}))
+    );
+    host.querySelectorAll('.fr-decline').forEach((el) =>
+      el.addEventListener('click', () =>
+        api.friendDecline(this.token, (el as HTMLElement).dataset.nick!).then(reloadFriends).catch(() => {}))
+    );
+    host.querySelectorAll('.fr-del').forEach((el) =>
+      el.addEventListener('click', () =>
+        api.friendRemove(this.token, (el as HTMLElement).dataset.nick!).then(reloadFriends).catch(() => {}))
+    );
+
+    // 쥬크박스 — 단곡 재생 / 선택 곡 이어듣기 (재생 중 곡 하이라이트는 수동 갱신: 체크박스 보존)
+    const markPlaying = () => {
+      host.querySelectorAll('.juke-row').forEach((el) =>
+        el.classList.toggle('on', (el as HTMLElement).dataset.key === bgm.current())
+      );
+    };
+    host.querySelectorAll('.juke-play').forEach((el) =>
+      el.addEventListener('click', () => {
+        bgm.play((el as HTMLElement).dataset.key!);
+        markPlaying();
+      })
+    );
+    host.querySelector('#jukeQueue')?.addEventListener('click', () => {
+      const keys = [...host.querySelectorAll('.juke-chk:checked')].map((el) => (el as HTMLElement).dataset.key!);
+      if (keys.length) {
+        bgm.playList(keys);
+        markPlaying();
+      }
+    });
+    host.querySelector('#jukeStop')?.addEventListener('click', () => {
+      bgm.play('lobby');
+      markPlaying();
     });
 
     host.querySelectorAll('.mini-card[data-mini]').forEach((el) =>
@@ -397,63 +529,6 @@ export class LobbyScene extends Phaser.Scene {
       })
     );
 
-    host.querySelectorAll('.dx-tab').forEach((el) =>
-      el.addEventListener('click', () => { this.dressTab = (el as HTMLElement).dataset.slot!; this.renderModal(); })
-    );
-    host.querySelectorAll('.dx-card').forEach((el) =>
-      el.addEventListener('click', () => void this.onItemClick(el as HTMLElement))
-    );
-    host.querySelector('#dxSave')?.addEventListener('click', () => void this.saveDress());
   }
 
-  private async openDress() {
-    try {
-      const [cat, inv] = await Promise.all([api.getItems(), api.getInventory(this.token)]);
-      this.items = cat.items;
-      this.owned = new Set((inv.items as ShopItem[]).map((i) => i.code));
-      this.draft = { ...(this.profile?.profile?.avatar?.equipped ?? {}) };
-      this.dressOpen = true;
-      this.dressMsg = '';
-      this.renderModal();
-    } catch (e) {
-      this.dressMsg = (e as Error).message;
-    }
-  }
-
-  private async onItemClick(el: HTMLElement) {
-    const code = el.dataset.code!;
-    const item = this.items.find((i) => i.code === code);
-    if (!item) return;
-    const isOwned = el.dataset.owned === '1';
-
-    if (!isOwned) {
-      if (!window.confirm(`"${item.name}" 아이템을 🪙 ${item.price}에 구매할까요?`)) return;
-      try {
-        await api.buyItem(this.token, item.id);
-        this.owned.add(code);
-        this.draft[item.slot] = code;
-        this.dressMsg = `${item.name} 구매 완료!`;
-        this.refreshProfile(); // 코인 갱신
-      } catch (e) {
-        this.dressMsg = (e as Error).message;
-      }
-      this.renderModal();
-      return;
-    }
-    if (this.draft[item.slot] === code) delete this.draft[item.slot];
-    else this.draft[item.slot] = code;
-    this.renderModal();
-  }
-
-  private async saveDress() {
-    try {
-      await api.equipAvatar(this.token, this.draft);
-      this.socket.emit('profileRefresh'); // 로비 접속자 목록에 반영
-      this.refreshProfile();
-      this.dressMsg = '저장되었습니다!';
-    } catch (e) {
-      this.dressMsg = (e as Error).message;
-    }
-    this.renderModal();
-  }
 }

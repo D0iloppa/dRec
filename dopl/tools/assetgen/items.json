@@ -1,0 +1,147 @@
+[
+  {
+    "code": "body_basic",
+    "slot": "body",
+    "prompt": "give the character a default warm beige skin tone"
+  },
+  {
+    "code": "body_tan",
+    "slot": "body",
+    "prompt": "give the character a tanned brown skin tone"
+  },
+  {
+    "code": "body_pale",
+    "slot": "body",
+    "prompt": "give the character a very fair pale skin tone"
+  },
+  {
+    "code": "body_mint",
+    "slot": "body",
+    "prompt": "give the character a fantasy mint-green skin tone"
+  },
+  {
+    "code": "body_robot",
+    "slot": "body",
+    "prompt": "turn the character's skin into smooth silver-grey robot plating with subtle panel lines, keeping the same face layout"
+  },
+  {
+    "code": "face_smile",
+    "slot": "face",
+    "prompt": "a bright happy smile expression with sparkling eyes"
+  },
+  {
+    "code": "face_cool",
+    "slot": "face",
+    "prompt": "a cool deadpan expression with a flat mouth and half-lidded eyes"
+  },
+  {
+    "code": "face_wink",
+    "slot": "face",
+    "prompt": "a playful winking expression, one eye closed, smiling"
+  },
+  {
+    "code": "face_surprise",
+    "slot": "face",
+    "prompt": "a surprised expression with wide round eyes and an open small mouth"
+  },
+  {
+    "code": "face_angry",
+    "slot": "face",
+    "prompt": "an angry pouting expression with furrowed eyebrows"
+  },
+  {
+    "code": "face_cat",
+    "slot": "face",
+    "prompt": "a cat-like expression with a :3 cat mouth and tiny whiskers on the cheeks"
+  },
+  {
+    "code": "hair_short",
+    "slot": "hair",
+    "prompt": "short neat black hair"
+  },
+  {
+    "code": "hair_spiky",
+    "slot": "hair",
+    "prompt": "spiky dark-brown anime hair pointing upward"
+  },
+  {
+    "code": "hair_long",
+    "slot": "hair",
+    "prompt": "long flowing chestnut-brown hair reaching the shoulders"
+  },
+  {
+    "code": "hair_curly",
+    "slot": "hair",
+    "prompt": "voluminous curly auburn hair"
+  },
+  {
+    "code": "hair_pony",
+    "slot": "hair",
+    "prompt": "navy-blue hair tied in a high ponytail with a small pink hair tie"
+  },
+  {
+    "code": "hair_bald",
+    "slot": "hair",
+    "prompt": "a clean shaved bald head"
+  },
+  {
+    "code": "top_tee",
+    "slot": "top",
+    "prompt": "a simple casual t-shirt (blue for male reference, pink for female reference)"
+  },
+  {
+    "code": "top_hoodie",
+    "slot": "top",
+    "prompt": "a purple hoodie worn with the front FULLY CLOSED (no open zipper, no exposed chest), completely covering the chest and torso, hood down, with a front kangaroo pocket"
+  },
+  {
+    "code": "top_suit",
+    "slot": "top",
+    "prompt": "a black formal suit with a white shirt and a red necktie"
+  },
+  {
+    "code": "top_stripe",
+    "slot": "top",
+    "prompt": "an orange-and-white horizontally striped shirt"
+  },
+  {
+    "code": "top_armor",
+    "slot": "top",
+    "prompt": "a shiny silver fantasy knight chest armor with a golden emblem"
+  },
+  {
+    "code": "acc_glasses",
+    "slot": "acc",
+    "prompt": "round thin-framed black glasses"
+  },
+  {
+    "code": "acc_sunglasses",
+    "slot": "acc",
+    "prompt": "black trendy sunglasses"
+  },
+  {
+    "code": "acc_crown",
+    "slot": "acc",
+    "prompt": "a small golden royal crown worn on top of the head"
+  },
+  {
+    "code": "acc_cap",
+    "slot": "acc",
+    "prompt": "a red baseball cap worn forward"
+  },
+  {
+    "code": "acc_ribbon",
+    "slot": "acc",
+    "prompt": "a large pink ribbon bow on the side of the head"
+  },
+  {
+    "code": "acc_headphone",
+    "slot": "acc",
+    "prompt": "big grey over-ear headphones worn on the head"
+  },
+  {
+    "code": "acc_halo",
+    "slot": "acc",
+    "prompt": "a glowing golden angel halo floating above the head"
+  }
+]

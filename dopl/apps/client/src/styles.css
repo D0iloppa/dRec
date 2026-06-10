@@ -372,6 +372,9 @@ button.mini { padding: .15rem .5rem; font-size: .75rem; margin-left: .5rem; }
 .room-side .chatlog { flex: 1; overflow-y: auto; margin-bottom: .5rem; }
 .room-side .chatline { font-size: .85rem; padding: .12rem 0; }
 .room-side .chatline b { color: #1d7fc4; }
+.room-side .chatline.mafia { color: #dc2626; } .room-side .chatline.mafia b { color: #b91c1c; }
+.room-side .chatline.dead { color: #8aa3b8; font-style: italic; } .room-side .chatline.dead b { color: #8aa3b8; }
+.room-side .chatform input:disabled { background: #e8eef4; color: #9bb0c0; cursor: not-allowed; }
 .room-side .chatform { display: flex; gap: .4rem; }
 .room-side .chatform input { flex: 1; padding: .45rem; border-radius: 10px; border: 2px solid #bfe0f7; background: #f6fbff; color: #16435f; }
 .room-side .chatform input:focus { outline: none; border-color: #3aa4e8; }
@@ -387,3 +390,110 @@ button.mini { padding: .15rem .5rem; font-size: .75rem; margin-left: .5rem; }
   font-weight: 800; cursor: pointer; }
 .room-leave:hover { background: #bfdbfe; }
 .room .muted { color: #5b87a6; }
+
+/* ===== 회원가입 성별 캐릭터 선택 ===== */
+.gender-pick { text-align: left; }
+.gender-label { display: block; font-size: .78rem; font-weight: 800; color: #0b6cb0; margin: .2rem 0 .3rem; }
+.gender-btns { display: flex; gap: .5rem; }
+.gender-btn { flex: 1; padding: .55rem; border-radius: 11px; border: 2px solid #bfe0ff; background: #eef6ff;
+  color: #5b86a6; font-weight: 800; cursor: pointer; }
+.gender-btn.on { background: linear-gradient(#3aa4e8, #1d7fc4); border-color: #15659f; color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.4); }
+
+/* ===== 프로필 카드 (공용) ===== */
+.pcard { text-align: center; }
+.pcard-ava { width: 100px; height: 124px; margin: 0 auto .4rem; filter: drop-shadow(0 5px 7px rgba(0,40,90,.25)); }
+.pcard h3 { margin: .1rem 0 .35rem; color: #0f5e9e; }
+.pcard-iq { color: #16a34a; font-weight: 900; margin-bottom: .5rem; }
+.pcard-xp { margin-bottom: .8rem; }
+.pcard-xp-bar { height: 12px; border-radius: 999px; background: #e2eef8; border: 1px solid #bfe0f7; overflow: hidden; }
+.pcard-xp-fill { height: 100%; background: linear-gradient(90deg, #5fbdf6, #1d7fc4); border-radius: 999px; }
+.pcard-xp small { color: #5b87a6; font-weight: 700; }
+
+/* ===== 상점/분장실 페이지 (별도 씬) ===== */
+.page-panel { width: 96vw; max-width: 1000px; height: 92vh; max-height: 700px; display: flex; flex-direction: column;
+  background: #fff; border: 3px solid #0f5e9e; border-radius: 20px; overflow: hidden; color: #16435f; font-size: 14px;
+  box-shadow: 0 0 0 4px rgba(255,255,255,.65), 0 0 0 7px rgba(31,119,184,.35), 0 18px 44px rgba(0,50,110,.45); }
+.page-panel .dx-head { font-size: 1.15rem; }
+.page-panel .dx-body { min-height: 0; }
+.page-panel .dx-preview-pane { width: 240px; gap: .6rem; padding: .8rem; }
+.page-panel .dx-big { width: 150px; height: 195px; }
+.shop-hint { color: #5b87a6; font-weight: 700; }
+.shop-buy { margin-top: .3rem; width: 100%; border: none; border-radius: 8px; padding: .3rem 0; font-weight: 900;
+  font-size: .78rem; color: #fff; background: linear-gradient(#fbbf24, #d97706); box-shadow: 0 2px 0 #a85a04; cursor: pointer; }
+.shop-buy:active { transform: translateY(1px); }
+.nick-edit { display: flex; gap: .35rem; width: 90%; }
+.nick-edit input { flex: 1; margin: 0; padding: .45rem .5rem; border: 2px solid #bfe0f7; border-radius: 9px;
+  background: #f6fbff; font-size: .85rem; font-weight: 700; }
+.nick-edit .lb-btn { padding: .35rem .6rem; font-size: .78rem; }
+.wear-chips { display: flex; flex-wrap: wrap; gap: .25rem; justify-content: center; padding: 0 .5rem; }
+.wear-chip { background: #e9f6ff; border: 1px solid #bfe2f8; color: #1769a8; border-radius: 999px;
+  padding: .1rem .5rem; font-size: .7rem; font-weight: 800; }
+
+/* ===== 쥬크박스 ===== */
+.juke-panel { max-width: 560px; }
+.juke-list { flex: 1; overflow-y: auto; padding: .6rem .8rem; display: flex; flex-direction: column; gap: .4rem; }
+.juke-row { display: flex; align-items: center; gap: .6rem; padding: .5rem .6rem; border: 2px solid #d9ecfa;
+  border-radius: 12px; background: linear-gradient(#ffffff, #f4faff); }
+.juke-row.on { border-color: #1d7fc4; background: linear-gradient(#eaf7ff, #d8eefc); box-shadow: inset 3px 0 0 #1d7fc4; }
+.juke-chk { width: 17px; height: 17px; margin: 0; flex-shrink: 0; accent-color: #1d7fc4; }
+.juke-info { flex: 1; min-width: 0; }
+.juke-info b { color: #0f5e9e; display: block; }
+.juke-info small { color: #5b87a6; font-weight: 700; }
+.juke-row.on .juke-info b::after { content: ' ♪ 재생 중'; color: #16a34a; font-size: .75rem; }
+.juke-play { padding: .35rem .7rem !important; font-size: .85rem !important; }
+
+/* ===== 친구 ===== */
+.fr-panel { max-width: 480px; }
+.fr-body { flex: 1; overflow-y: auto; padding: .7rem .9rem; }
+.fr-body h4 { margin: .7rem 0 .35rem; color: #0f5e9e; }
+.fr-add { display: flex; gap: .4rem; }
+.fr-add input { flex: 1; margin: 0; padding: .5rem .6rem; border: 2px solid #bfe0f7; border-radius: 10px; background: #f6fbff; }
+.fr-add input:focus { outline: none; border-color: #3aa4e8; }
+.fr-row { display: flex; align-items: center; gap: .5rem; padding: .35rem .45rem; border: 2px solid #e4f1fb;
+  border-radius: 11px; background: linear-gradient(#ffffff, #f6fbff); margin-bottom: .35rem; }
+.fr-ava { width: 26px; height: 32px; flex-shrink: 0; }
+.fr-dot { width: 10px; height: 10px; border-radius: 50%; background: #cbd5e1; flex-shrink: 0; }
+.fr-dot.on { background: #22c55e; box-shadow: 0 0 5px #22c55e; }
+.fr-nick { flex: 1; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fr-wait { font-size: .75rem; color: #7da7c4; font-weight: 700; }
+.fr-btn { border: none; border-radius: 8px; padding: .3rem .6rem; font-weight: 800; font-size: .76rem; cursor: pointer; color: #fff; }
+.fr-accept { background: linear-gradient(#4ade80, #16a34a); }
+.fr-decline { background: linear-gradient(#a8b0b8, #848b93); }
+.fr-del { background: linear-gradient(#f87171, #dc2626); }
+
+/* ===== PNG 레이어 아바타 (v2) ===== */
+.ava-stack { position: relative; display: block; width: 100%; height: 100%; }
+.ava-stack img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+.base-pick { display: flex; align-items: center; gap: .45rem; padding: .55rem .7rem 0; }
+.base-pick-label { font-size: .8rem; font-weight: 900; color: #0f5e9e; }
+.base-opt { width: 56px; height: 74px; border: 2px solid #d9ecfa; border-radius: 10px; cursor: pointer;
+  background: linear-gradient(#ffffff, #f4faff); padding: 3px; transition: .1s; }
+.base-opt img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+.base-opt:hover { border-color: #3aa4e8; }
+.base-opt.sel { border-color: #22c55e; background: #f0fdf4; }
+
+/* ===== 방 만들기 — 게임 카탈로그 ===== */
+.gamecat-panel { max-width: 640px; }
+.gc-grid { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(2, 1fr); gap: .6rem; padding: .8rem; }
+.gc-card { position: relative; border: 3px solid #d9ecfa; border-radius: 14px; overflow: hidden; cursor: pointer;
+  background: #fff; transition: .12s; }
+.gc-card:hover { transform: translateY(-2px); border-color: #3aa4e8; box-shadow: 0 6px 14px rgba(0,50,110,.2); }
+.gc-card.sel { border-color: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,.25), 0 6px 14px rgba(0,50,110,.2); }
+.gc-img { height: 110px; background: #0f172a; }
+.gc-img img { width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; display: block; }
+.gc-img.noimg { background: linear-gradient(#3aa4e8, #1d7fc4); }
+.gc-info { padding: .45rem .6rem .55rem; }
+.gc-info b { color: #0f5e9e; display: block; }
+.gc-info small { color: #5b87a6; font-weight: 700; display: block; margin: .1rem 0 .25rem; }
+.gc-players { display: inline-block; background: #e9f6ff; border: 1px solid #bfe2f8; color: #1769a8;
+  border-radius: 999px; padding: .08rem .5rem; font-size: .72rem; font-weight: 800; }
+.gc-check { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 50%;
+  background: #22c55e; color: #fff; font-weight: 900; display: none; align-items: center; justify-content: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,.3); }
+.gc-card.sel .gc-check { display: flex; }
+.gc-foot input { flex: 1; margin: 0; padding: .55rem .7rem; border: 2px solid #bfe0f7; border-radius: 10px; background: #f6fbff; }
+.gc-foot input:focus { outline: none; border-color: #3aa4e8; }
+.base-opt { display: flex; flex-direction: column; align-items: center; width: 60px; height: 92px; }
+.base-opt img { height: 70px; }
+.base-name { font-size: .68rem; font-weight: 900; color: #0f5e9e; }

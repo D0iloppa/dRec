@@ -126,6 +126,40 @@ npm run dev       # Nodemon hot-reload dev
 npm run start     # Production start
 ```
 
+### dopl 애셋 생성기 (나노바나나)
+dopl 게임의 캐릭터/아이템 착용샷은 `dopl/tools/assetgen/`의 파이썬 모듈로 생성한다.
+```bash
+cd dopl/tools/assetgen
+python3 assetgen.py check            # 키/모델 확인
+python3 assetgen.py base             # 남/여 베이스 캐릭터
+python3 assetgen.py item <code>      # 아이템 착용샷 (베이스를 레퍼런스로 캐릭터 일관성 유지)
+python3 assetgen.py all [--slot S]   # 전체
+```
+- **API 키**: `dopl/tools/assetgen/.env`의 `GEMINI_API_KEY` (gitignore — `.env.example` 참고)
+- 아이템 프롬프트: `items.json` (code는 `db/seed_items.sql`의 item.code와 1:1)
+- 산출물: `dopl/assets_gen/<m|f>/` (gitignore) → **검수 후** `dopl/apps/client/public/avatar/`로 승격
+- 스타일은 `assetgen.py`의 `STYLE`/`BASE_PROMPTS` 상수로 통일 — 스타일 변경 시 base부터 재생성
+- **스타일 철칙(필독): `dopl/tools/assetgen/STYLE_GUIDE.md`** — 레트로 도트 톤 불변, 착용샷은 반드시 `ref/base_*.png` 레퍼런스 첨부, 임의 프롬프트 생성 금지
+- API 한도 소진 시: `dopl/tools/assetgen/ANTIGRAVITY_PROMPTS.md`의 프롬프트로 안티그라비티에서 수동 생성 → 지정 파일명으로 저장 → refine/audit/promote (API 불필요)
+- 자세한 워크플로: `dopl/tools/assetgen/README.md`
+
+### dopl 애셋 생성기 (나노바나나)
+dopl 게임의 캐릭터/아이템 착용샷은 `dopl/tools/assetgen/`의 파이썬 모듈로 생성한다.
+```bash
+cd dopl/tools/assetgen
+python3 assetgen.py check            # 키/모델 확인
+python3 assetgen.py base             # 남/여 베이스 캐릭터
+python3 assetgen.py item <code>      # 아이템 착용샷 (베이스를 레퍼런스로 캐릭터 일관성 유지)
+python3 assetgen.py all [--slot S]   # 전체
+```
+- **API 키**: `dopl/tools/assetgen/.env`의 `GEMINI_API_KEY` (gitignore — `.env.example` 참고)
+- 아이템 프롬프트: `items.json` (code는 `db/seed_items.sql`의 item.code와 1:1)
+- 산출물: `dopl/assets_gen/<m|f>/` (gitignore) → **검수 후** `dopl/apps/client/public/avatar/`로 승격
+- 스타일은 `assetgen.py`의 `STYLE`/`BASE_PROMPTS` 상수로 통일 — 스타일 변경 시 base부터 재생성
+- **스타일 철칙(필독): `dopl/tools/assetgen/STYLE_GUIDE.md`** — 레트로 도트 톤 불변, 착용샷은 반드시 `ref/base_*.png` 레퍼런스 첨부, 임의 프롬프트 생성 금지
+- API 한도 소진 시: `dopl/tools/assetgen/ANTIGRAVITY_PROMPTS.md`의 프롬프트로 안티그라비티에서 수동 생성 → 지정 파일명으로 저장 → refine/audit/promote (API 불필요)
+- 자세한 워크플로: `dopl/tools/assetgen/README.md`
+
 ## Key File Locations
 
 - **Nginx site config**: `nginx/conf.d/doil.me.conf`

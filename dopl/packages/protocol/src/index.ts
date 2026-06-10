@@ -31,6 +31,9 @@ export interface ChatMessage {
   name: string;
   text: string;
   ts: number;
+  // 채팅 채널 태그 (마피아 밤 채팅 'mafia', 유령 채팅 'dead' 등). 없으면 전체 공개.
+  // 가시성 판정은 엔진의 chatVisible 훅이 담당, 클라는 스타일링에만 사용.
+  vis?: string;
 }
 
 // 클라이언트 → 서버 게임 행동

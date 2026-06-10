@@ -19,6 +19,12 @@ async function loadProfile(userId: number) {
 
 const rooms = new Map<string, Room>();
 
+// 접속 중 유저 (친구 온라인 표시용). 같은 유저 다중 접속 대비 refcount.
+const onlineCount = new Map<number, number>();
+export function isOnline(uid: number): boolean {
+  return (onlineCount.get(uid) ?? 0) > 0;
+}
+
 function genCode(): string {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   let c = '';
@@ -99,6 +105,7 @@ export function setupRealtime(http: HttpServer): Server {
   nsp.on('connection', (socket) => {
     const user = socket.data.user as JwtPayload;
     const pid = `u${user.uid}`;
+    onlineCount.set(user.uid, (onlineCount.get(user.uid) ?? 0) + 1);
     let room: Room | null = null;
     socket.emit('games', gameList);
 
@@ -138,7 +145,7 @@ export function setupRealtime(http: HttpServer): Server {
         code = genCode();
       } while (rooms.has(code));
       const r = new Room(code, type);
-      r.title = (typeof title === 'string' && title.trim() ? title.trim().slice(0, 30) : '') || `${user.username}의 방`;
+      r.title = (typeof title === 'string' && title.trim() ? title.trim().slice(0, 30) : '') || `${myName()}의 방`;
       r.onChange = () => void update(r);
       r.context.loadOxQuestions = () => loadOxQuestions(10);
       r.context.loadMcQuestions = () => loadMcQuestions(10);
@@ -149,11 +156,13 @@ export function setupRealtime(http: HttpServer): Server {
     };
 
     const myAvatar = () => socket.data.profile?.avatar ?? null;
+    // 방 안 표시 이름 = 닉네임 (로비/프로필과 일관)
+    const myName = () => socket.data.profile?.nickname ?? user.username;
 
     socket.on('createRoom', (payload, cb) => {
       const r = makeRoom(payload?.type, payload?.title);
       if (!r) return cb?.({ ok: false, error: '알 수 없는 게임 타입' });
-      r.addPlayer(pid, payload?.name || user.username, socket.id, user.uid, myAvatar());
+      r.addPlayer(pid, myName(), socket.id, user.uid, myAvatar());
       room = r;
       enterRoom();
       cb?.({ ok: true, code: r.code });
@@ -166,7 +175,7 @@ export function setupRealtime(http: HttpServer): Server {
       const max = registry[r.type]?.meta.maxPlayers;
       if (max && !r.player(pid) && r.list().length >= max)
         return cb?.({ ok: false, error: '정원이 가득 찼습니다.' });
-      if (!r.addPlayer(pid, payload?.name || user.username, socket.id, user.uid, myAvatar()))
+      if (!r.addPlayer(pid, myName(), socket.id, user.uid, myAvatar()))
         return cb?.({ ok: false, error: '이미 시작된 게임입니다.' });
       room = r;
       enterRoom();
@@ -236,6 +245,9 @@ export function setupRealtime(http: HttpServer): Server {
     });
 
     socket.on('disconnect', () => {
+      const n = (onlineCount.get(user.uid) ?? 1) - 1;
+      if (n <= 0) onlineCount.delete(user.uid);
+      else onlineCount.set(user.uid, n);
       lobby.delete(socket);
       if (room) {
         room.disconnectSocket(socket.id);

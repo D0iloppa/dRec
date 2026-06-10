@@ -4,10 +4,14 @@
 import Phaser from 'phaser';
 import type { RoomState } from '@dopl/protocol';
 import { addCartoonBackdrop } from '../backdrop';
-import { avatarSvg } from '../avatar';
+import { avatarImgHtml } from '../avatarRender';
+import { profileCardHtml } from '../profileCard';
+import { bgm } from '../bgm';
+import * as api from '../api';
 import { OxScene } from '../games/ox/OxScene';
 import { CommonQuizScene } from '../games/common-quiz/CommonQuizScene';
 import { SpeedQuizScene } from '../games/speed-quiz/SpeedQuizScene';
+import { MafiaScene } from '../games/mafia/MafiaScene';
 
 interface DoplGameScene extends Phaser.Scene {
   sendAction: (a: unknown) => void;
@@ -17,6 +21,7 @@ const GAME_SCENES: Record<string, new () => DoplGameScene> = {
   'ox-quiz': OxScene as unknown as new () => DoplGameScene,
   'common-quiz': CommonQuizScene as unknown as new () => DoplGameScene,
   'speed-quiz': SpeedQuizScene as unknown as new () => DoplGameScene,
+  'mafia': MafiaScene as unknown as new () => DoplGameScene,
 };
 
 const PHASE_LABEL: Record<string, string> = { lobby: '대기실', playing: '진행 중', ended: '종료' };
@@ -24,6 +29,7 @@ const PHASE_LABEL: Record<string, string> = { lobby: '대기실', playing: '진�
 export class RoomScene extends Phaser.Scene {
   private dom!: Phaser.GameObjects.DOMElement;
   private socket!: import('socket.io-client').Socket;
+  private token = '';
   private state!: RoomState;
   private games: { type: string; label: string; minPlayers: number; maxPlayers: number }[] = [];
   private onLeave!: () => void;
@@ -40,6 +46,7 @@ export class RoomScene extends Phaser.Scene {
   create() {
     addCartoonBackdrop(this);
     this.socket = this.game.registry.get('socket');
+    this.token = this.game.registry.get('token') ?? '';
     this.state = this.game.registry.get('room');
     this.games = this.game.registry.get('games') ?? [];
     this.onLeave = this.game.registry.get('onLeave');
@@ -59,8 +66,15 @@ export class RoomScene extends Phaser.Scene {
 
     this.time.addEvent({ delay: 500, loop: true, callback: () => this.tickTimer() });
 
+    this.roomBgm();
     this.renderShell();
     this.refresh();
+  }
+
+  // 방 기본 BGM — 퀴즈류는 퀴즈 트랙, 그 외(마피아 등)는 무음(마피아는 단계별 트랙이 인게임에서 제어)
+  private roomBgm() {
+    if (['ox-quiz', 'common-quiz', 'speed-quiz'].includes(this.state?.type)) bgm.play('quiz');
+    else bgm.stop();
   }
 
   private esc(s: string) {
@@ -89,6 +103,7 @@ export class RoomScene extends Phaser.Scene {
           </aside>
         </div>
         <button id="rLeave" class="room-leave">나가기</button>
+        <div id="rModal"></div>
       </div>`;
 
     const n = this.node();
@@ -142,10 +157,23 @@ export class RoomScene extends Phaser.Scene {
       this.renderEnded(main, s);
     }
 
-    // 채팅 로그 (입력/폼은 건드리지 않음)
+    // 채팅 로그 (입력/폼은 건드리지 않음). vis 채널(마피아/유령) 스타일 + 게임 중 채팅 잠금 반영.
     const log = n.querySelector('#rChatLog') as HTMLElement;
-    log.innerHTML = s.chat.map((c) => `<div class="chatline"><b>${this.esc(c.name)}</b> ${this.esc(c.text)}</div>`).join('');
+    log.innerHTML = s.chat
+      .map((c) => {
+        const vis = (c as { vis?: string }).vis;
+        const tag = vis === 'mafia' ? '🔪 ' : vis === 'dead' ? '👻 ' : '';
+        return `<div class="chatline ${vis ?? ''}">${tag}<b>${this.esc(c.name)}</b> ${this.esc(c.text)}</div>`;
+      })
+      .join('');
     log.scrollTop = log.scrollHeight;
+
+    const input = n.querySelector('#rChatInput') as HTMLInputElement | null;
+    if (input) {
+      const locked = s.phase === 'playing' && (s.game as any)?.chatLocked === true;
+      input.disabled = locked;
+      input.placeholder = locked ? '🌙 밤에는 채팅할 수 없습니다' : '메시지…';
+    }
 
     this.dom.updateSize();
     this.dom.setPosition(this.scale.width / 2, this.scale.height / 2);
@@ -158,8 +186,8 @@ export class RoomScene extends Phaser.Scene {
     const players = s.players
       .map(
         (p) => `
-        <div class="wait-seat ${p.connected ? '' : 'off'}">
-          <div class="wait-ava">${avatarSvg(((p as any).avatar?.equipped as Record<string, string>) ?? {})}</div>
+        <div class="wait-seat ${p.connected ? '' : 'off'}" data-nick="${this.esc(p.name)}" title="프로필 보기">
+          <div class="wait-ava">${avatarImgHtml((p as any).avatar ?? {})}</div>
           <div class="wait-name">${p.isHost ? '👑 ' : ''}${this.esc(p.name)}${p.id === s.myId ? ' (나)' : ''}</div>
         </div>`
       )
@@ -173,6 +201,42 @@ export class RoomScene extends Phaser.Scene {
           : `<p class="muted">호스트가 시작하기를 기다리는 중…</p>`}
       </div>`;
     main.querySelector('#rStart')?.addEventListener('click', () => this.socket.emit('start'));
+    main.querySelectorAll('.wait-seat').forEach((el) =>
+      el.addEventListener('click', () => void this.showProfile((el as HTMLElement).dataset.nick!))
+    );
+  }
+
+  // 참가자 프로필 카드 (공개 정보 조회)
+  private async showProfile(nickname: string) {
+    const host = this.node().querySelector('#rModal') as HTMLElement;
+    if (!host) return;
+    try {
+      const { profile } = await api.getPublicProfile(this.token, nickname);
+      const isMe = this.state.players.find((p) => p.id === this.state.myId)?.name === nickname;
+      host.innerHTML = `
+        <div class="modal-bg" id="rpBg">
+          <div class="modal lb-modal profile-modal">
+            ${profileCardHtml(profile)}
+            <div class="modal-btns">
+              ${isMe ? '' : `<button id="rpAddFr" class="btn-ghost">➕ 친구 요청</button>`}
+              <button id="rpClose" class="btn-primary">닫기</button>
+            </div>
+          </div>
+        </div>`;
+      const close = () => { host.innerHTML = ''; };
+      const addBtn = host.querySelector('#rpAddFr') as HTMLButtonElement | null;
+      addBtn?.addEventListener('click', () => {
+        api.friendRequest(this.token, nickname)
+          .then((r) => { addBtn.textContent = r.accepted ? '✅ 친구가 됐어요!' : '✅ 요청 보냄'; addBtn.disabled = true; })
+          .catch((err) => { addBtn.textContent = err.message; addBtn.disabled = true; });
+      });
+      host.querySelector('#rpClose')?.addEventListener('click', close);
+      host.querySelector('#rpBg')?.addEventListener('click', (e) => { if ((e.target as HTMLElement).id === 'rpBg') close(); });
+      this.dom.updateSize();
+      this.dom.setPosition(this.scale.width / 2, this.scale.height / 2);
+    } catch {
+      /* 조회 실패 시 무시 */
+    }
   }
 
   private renderInGame(main: HTMLElement, s: RoomState) {
@@ -249,6 +313,7 @@ export class RoomScene extends Phaser.Scene {
       this.gameInstance.destroy(true);
       this.gameInstance = null;
       this.gameScene = null;
+      this.roomBgm(); // 인게임 BGM(마피아 단계 트랙 등) → 방 기본 트랙으로 복귀
     }
   }
 }

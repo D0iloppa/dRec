@@ -7,9 +7,9 @@ import type { RoomState } from '@dopl/protocol';
 import { RoomScene } from '../scenes/RoomScene';
 
 export default function PhaserRoom({
-  socket, room, games, error, onLeave,
+  socket, room, games, error, onLeave, token,
 }: {
-  socket: Socket; room: RoomState; games: any[]; error: string; onLeave: () => void;
+  socket: Socket; room: RoomState; games: any[]; error: string; onLeave: () => void; token: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -32,6 +32,7 @@ export default function PhaserRoom({
     game.registry.set('socket', socket);
     game.registry.set('games', games);
     game.registry.set('onLeave', onLeave);
+    game.registry.set('token', token);
     game.registry.set('room', room);
     game.registry.set('roomError', error);
     gameRef.current = game;

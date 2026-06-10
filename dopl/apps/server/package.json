@@ -12,6 +12,7 @@
     "@dopl/game-ox-quiz": "*",
     "@dopl/game-common-quiz": "*",
     "@dopl/game-speed-quiz": "*",
+    "@dopl/game-mafia": "*",
     "@dopl/protocol": "*",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",

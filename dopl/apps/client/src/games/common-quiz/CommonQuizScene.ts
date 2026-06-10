@@ -1,6 +1,7 @@
 // 상식퀴즈(4지선다) Phaser 씬. 보기 4개 버튼, 서바이벌.
 import Phaser from 'phaser';
 import type { RoomState } from '@dopl/protocol';
+import { avatarTexture } from '../../avatarTexture';
 
 export class CommonQuizScene extends Phaser.Scene {
   sendAction!: (a: { kind: string; index?: number }) => void;
@@ -98,11 +99,22 @@ export class CommonQuizScene extends Phaser.Scene {
     (s.players as any[]).forEach((p, i) => {
       const x = 36 + (i % 8) * 66;
       const y = this.scale.height - 40 - Math.floor(i / 8) * 48;
-      const circ = this.add.circle(x, y, 14, 0x334155, p.alive !== false ? 1 : 0.3);
-      if (g.stage === 'answer' && p.answered) circ.setStrokeStyle(3, 0xfacc15);
-      const face = this.add.text(x, y, p.alive !== false ? '🙂' : '💀', { fontSize: '14px' }).setOrigin(0.5);
-      const nm = this.add.text(x, y + 18, p.name + (p.id === s.myId ? '(나)' : ''), { fontSize: '9px', color: '#cbd5e1' }).setOrigin(0.5);
-      this.tokens.add([circ, face, nm]);
+      const alive = p.alive !== false;
+      const ring = this.add.circle(x, y, 18, 0x000000, 0);
+      if (g.stage === 'answer' && p.answered) ring.setStrokeStyle(3, 0xfacc15);
+      this.tokens.add(ring);
+      // 꾸민 캐릭터 노출 (텍스처 준비 전엔 원형 폴백)
+      const texKey = avatarTexture(this, p.avatar, () => this.render());
+      if (texKey) {
+        const img = this.add.image(x, y, texKey).setDisplaySize(26, 34);
+        if (!alive) { img.setAlpha(0.35); img.setTint(0x9aa7b5); }
+        this.tokens.add(img);
+      } else {
+        this.tokens.add(this.add.circle(x, y, 12, 0x334155, alive ? 0.9 : 0.3));
+      }
+      if (!alive) this.tokens.add(this.add.text(x, y, '💀', { fontSize: '13px' }).setOrigin(0.5));
+      const nm = this.add.text(x, y + 22, p.name + (p.id === s.myId ? '(나)' : ''), { fontSize: '9px', color: '#cbd5e1' }).setOrigin(0.5);
+      this.tokens.add(nm);
     });
   }
 }

@@ -38,6 +38,27 @@ profileRouter.get('/me', requireAuth, async (req: AuthedRequest, res) => {
   }
 });
 
+// 공개 프로필 조회 (다른 유저 정보 카드용 — 닉네임 기준, 민감 정보 제외)
+profileRouter.get('/of/:nickname', requireAuth, async (req, res) => {
+  const nickname = String(req.params.nickname ?? '').slice(0, 20);
+  try {
+    const { rows } = await pool.query(
+      `SELECT p.nickname, p.iq, p.xp, p.avatar, u.created_at
+         FROM user_profile p JOIN users u ON u.id = p.user_id
+        WHERE p.nickname = $1 LIMIT 1`,
+      [nickname]
+    );
+    if (!rows[0]) {
+      res.status(404).json({ error: '유저를 찾을 수 없습니다.' });
+      return;
+    }
+    res.json({ profile: rows[0] });
+  } catch (e) {
+    console.error('[profile/of]', e);
+    res.status(500).json({ error: '프로필 조회 오류' });
+  }
+});
+
 // 닉네임/아바타 수정
 profileRouter.patch('/me', requireAuth, async (req: AuthedRequest, res) => {
   const { nickname, avatar } = req.body ?? {};
@@ -76,11 +97,17 @@ profileRouter.patch('/me', requireAuth, async (req: AuthedRequest, res) => {
   }
 });
 
-// 아바타 장착: { equipped: { slot: code } }. 무료(price 0) 또는 보유 아이템만 허용.
+// 아바타 장착: { equipped: { slot: code }, base?: 1~3 }. 무료(price 0) 또는 보유 아이템만 허용.
 profileRouter.put('/equip', requireAuth, async (req: AuthedRequest, res) => {
   const equipped = req.body?.equipped;
   if (typeof equipped !== 'object' || equipped === null) {
     res.status(400).json({ error: 'equipped 맵이 필요합니다.' });
+    return;
+  }
+  const baseRaw = req.body?.base;
+  const baseN = baseRaw === undefined || baseRaw === null ? null : Number(baseRaw);
+  if (baseN !== null && (!Number.isInteger(baseN) || baseN < 1 || baseN > 3)) {
+    res.status(400).json({ error: 'base는 1~3이어야 합니다.' });
     return;
   }
   const entries = Object.entries(equipped).filter(([, v]) => typeof v === 'string') as [string, string][];
@@ -101,11 +128,20 @@ profileRouter.put('/equip', requireAuth, async (req: AuthedRequest, res) => {
       if (it.price > 0 && !it.owned) { res.status(403).json({ error: `미보유 아이템: ${code}` }); return; }
       valid[slot] = code;
     }
-    await pool.query(
-      `UPDATE user_profile SET avatar = jsonb_set(coalesce(avatar, '{}'::jsonb), '{equipped}', $2::jsonb), updated_at = now() WHERE user_id = $1`,
-      [req.user!.uid, JSON.stringify(valid)]
-    );
-    res.json({ ok: true, equipped: valid });
+    if (baseN !== null) {
+      await pool.query(
+        `UPDATE user_profile SET avatar = jsonb_set(
+           jsonb_set(coalesce(avatar, '{}'::jsonb), '{equipped}', $2::jsonb),
+           '{base}', to_jsonb($3::int)), updated_at = now() WHERE user_id = $1`,
+        [req.user!.uid, JSON.stringify(valid), baseN]
+      );
+    } else {
+      await pool.query(
+        `UPDATE user_profile SET avatar = jsonb_set(coalesce(avatar, '{}'::jsonb), '{equipped}', $2::jsonb), updated_at = now() WHERE user_id = $1`,
+        [req.user!.uid, JSON.stringify(valid)]
+      );
+    }
+    res.json({ ok: true, equipped: valid, base: baseN ?? undefined });
   } catch (e) {
     console.error('[profile/equip]', e);
     res.status(500).json({ error: '장착 처리 오류' });

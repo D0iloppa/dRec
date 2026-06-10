@@ -3,6 +3,10 @@ import type { Socket } from 'socket.io-client';
 import type { RoomState } from '@dopl/protocol';
 import { connectGame } from './socket';
 import * as api from './api';
+import { loadBgmMeta } from './bgm';
+
+// BGM 트랙 메타(DB) 1회 로드 — 씬들이 key로 참조
+void loadBgmMeta();
 import PhaserLogin from './ui/PhaserLogin';
 import PhaserLobby from './ui/PhaserLobby';
 import PhaserRoom from './ui/PhaserRoom';
@@ -42,6 +46,8 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
+  // BGM은 각 씬(LoginScene/LobbyScene/ShopScene/DressScene/RoomScene)이 화면별 트랙으로 제어
+
   // 게임 종료 시 적립된 IQ/코인이 로비에 반영되도록 프로필 재조회
   useEffect(() => {
     if (room?.phase === 'ended' && token) api.getProfile(token).then(setProfile).catch(() => {});
@@ -57,6 +63,7 @@ export default function App() {
         room={room}
         games={games}
         error={error}
+        token={token}
         onLeave={() => { socket.emit('returnToLobby'); setRoom(null); }}
       />
     );

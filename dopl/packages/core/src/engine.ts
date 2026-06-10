@@ -21,6 +21,10 @@ export abstract class GameEngine {
   // 미구현(undefined)이면 서버가 일반 채팅으로 처리.
   onChat?(playerId: string, text: string): void;
 
+  // vis 태그가 달린 채팅의 viewer별 가시성 판정 (마피아 밤 채팅/유령 채팅 등).
+  // 미구현이면 vis 달린 메시지는 숨김.
+  chatVisible?(msg: import('@dopl/protocol').ChatMessage, viewerId: string): boolean;
+
   playerView(_player: PlayerView, _viewerId: string): Record<string, unknown> {
     return {};
   }

@@ -11,6 +11,7 @@
     { "path": "../../packages/protocol" },
     { "path": "../../packages/games/ox-quiz" },
     { "path": "../../packages/games/common-quiz" },
-    { "path": "../../packages/games/speed-quiz" }
+    { "path": "../../packages/games/speed-quiz" },
+    { "path": "../../packages/games/mafia" }
   ]
 }

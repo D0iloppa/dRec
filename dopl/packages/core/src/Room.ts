@@ -84,10 +84,12 @@ export class Room {
     return null;
   }
 
-  addChat(playerId: string, text: string): void {
+  addChat(playerId: string, text: string, vis?: string): void {
     const p = this.players.get(playerId);
     if (!p || !text) return;
-    this.chat.push({ name: p.name, text: String(text).slice(0, 300), ts: Date.now() });
+    const msg: ChatMessage = { name: p.name, text: String(text).slice(0, 300), ts: Date.now() };
+    if (vis) msg.vis = vis;
+    this.chat.push(msg);
     if (this.chat.length > 100) this.chat.shift();
   }
 
@@ -120,6 +122,8 @@ export class Room {
       avatar: p.avatar ?? null,
       ...this.game.playerView(p as never, viewerId),
     }));
+    // 채널(vis) 달린 메시지는 엔진의 chatVisible 훅으로 viewer별 필터 (마피아 밤 채팅 등)
+    const chat = this.chat.filter((m) => !m.vis || (this.game.chatVisible?.(m, viewerId) ?? false));
     return {
       code: this.code,
       type: this.type,
@@ -128,7 +132,7 @@ export class Room {
       myId: viewerId,
       timerEndsAt: this.timerEndsAt,
       players,
-      chat: this.chat.slice(-50),
+      chat: chat.slice(-50),
       game: this.game.viewFor(viewerId),
     };
   }

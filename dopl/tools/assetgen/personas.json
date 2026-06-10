@@ -1,0 +1,54 @@
+{
+  "m": [
+    {
+      "id": "m1",
+      "name": "지호",
+      "name_en": "Jiho",
+      "look": "short neat black hair, sharp eyes, confident smirk",
+      "persona": "a calm and calculating city hustler; always composed, wins with a sly smile",
+      "desc": "도시의 승부사. 차갑게 계산하고, 웃으면서 이긴다."
+    },
+    {
+      "id": "m2",
+      "name": "태오",
+      "name_en": "Taeo",
+      "look": "wavy brown medium hair, friendly grin, slightly tanned skin",
+      "persona": "a cheerful mood-maker full of energy; loud laugh, big gestures, loves the crowd",
+      "desc": "타고난 분위기 메이커. 지는 게임도 즐겁게 만든다."
+    },
+    {
+      "id": "m3",
+      "name": "강우",
+      "name_en": "Kangwoo",
+      "look": "buzz-cut hair, stern cool expression, strong jaw",
+      "persona": "a silent competitor with killer instinct; expressionless face, lightning-fast hands",
+      "desc": "말수 적은 승부 본능. 표정은 없지만 손은 빠르다."
+    }
+  ],
+  "f": [
+    {
+      "id": "f1",
+      "name": "세라",
+      "name_en": "Sera",
+      "look": "shoulder-length dark hair, confident stylish expression, light makeup",
+      "persona": "a chic strategist; observes quietly, strikes precisely, smiles last",
+      "desc": "시크한 전략가. 조용히 보다가 정확히 찌르고, 마지막에 웃는다."
+    },
+    {
+      "id": "f2",
+      "name": "유나",
+      "name_en": "Yuna",
+      "look": "long wavy blonde hair, bright cheerful smile",
+      "persona": "a sunny social butterfly; big reactions, loves dressing up and being seen",
+      "desc": "햇살 같은 인싸. 리액션 부자, 꾸미기에 진심."
+    },
+    {
+      "id": "f3",
+      "name": "민지",
+      "name_en": "Minji",
+      "look": "short bob black hair with blunt bangs, cool chic expression",
+      "persona": "a cool-headed observer of few words; quietly says only the right answer",
+      "desc": "쿨한 관찰자. 조용히 정답만 말한다."
+    }
+  ]
+}
