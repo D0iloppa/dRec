@@ -8,5 +8,38 @@
     "f/b2": 0.74,
     "f/b3": 0.74
   },
-  "crop": {}
+  "crop": {},
+  "adjust": {
+    "m/b2/acc_sunglasses": {
+      "from": "m/b3",
+      "dx": 37,
+      "dy": -5
+    },
+    "f/b2/acc_sunglasses": {
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "_메모": "소스 전부 오염 — 리롤 대기"
+    },
+    "m/b3/top_suit": {
+      "dy": 35
+    },
+    "f/b1/top_suit": {
+      "dy": 18
+    },
+    "m/b1/acc_sunglasses": {
+      "from": "m/b3",
+      "dx": 26,
+      "dy": 0,
+      "crop": [
+        39,
+        415,
+        252,
+        490
+      ]
+    }
+  }
 }

@@ -584,8 +584,8 @@ SLOT_REGIONS = {
     "hair_pony": (-0.30, -0.40, 1.30, 0.60),
     "hair_long": (-0.30, -0.40, 1.30, 1.00),
     "top_hoodie": (-0.25, 0.42, 1.25, 2.5),
-    "top_suit": (-0.25, 0.42, 1.25, 2.5),
-    "top_stripe": (-0.25, 0.42, 1.25, 2.5),
+    "top_suit": (-0.25, 0.52, 1.25, 2.5),
+    "top_stripe": (-0.25, 0.52, 1.25, 2.5),
 }
 
 
@@ -654,16 +654,30 @@ def cmd_promote(args):
             head_w = max(rows[y] for y in range(y0 + int(ch * 0.08), y0 + int(ch * 0.30)))
             # 수동 배율(crops.json — 태오 m/b2 기준) 우선, 없으면 머리폭 자동
             s = crops.get("scale", {}).get(f"{g}/b{i}") or (STD_HEAD_W / head_w)
-            # 오버레이 keep 박스 적용 — 수동(crop) > 슬롯 기본(SLOT_REGIONS)
-            for name, img in imgs.items():
+            # 오버레이 보정 — adjust(crop+이동) > crop(keep 박스) > 슬롯 기본(SLOT_REGIONS)
+            for name in list(imgs.keys()):
                 if name == "base":
                     continue
-                manual = crops.get("crop", {}).get(f"{g}/b{i}/{name}")
+                img = imgs[name]
+                key = f"{g}/b{i}/{name}"
+                adj = crops.get("adjust", {}).get(key, {})
+                if adj.get("from"):
+                    src_g, src_b = adj["from"].split("/")
+                    src_p = V2_ROOT / src_g / f"overlay_{name}_{src_b}.png"
+                    if src_p.exists():
+                        img = Image.open(src_p).convert("RGBA").resize(img.size)
+                        imgs[name] = img
+                manual = adj.get("crop") or crops.get("crop", {}).get(key)
                 if manual:
                     apply_keep_box(img, manual)
                 elif name in SLOT_REGIONS:
                     rx0, ry0, rx1, ry1 = SLOT_REGIONS[name]
                     apply_keep_box(img, (x0 + rx0 * cw, y0 + ry0 * ch, x0 + rx1 * cw, y0 + ry1 * ch))
+                dx, dy = int(adj.get("dx", 0)), int(adj.get("dy", 0))
+                if dx or dy:
+                    moved = Image.new("RGBA", img.size, (0, 0, 0, 0))
+                    moved.paste(img, (dx, dy), img)
+                    imgs[name] = moved
             cx = ((x0 + x1) / 2) * s
             ox = round(STD_W / 2 - cx)
             oy = round(TOP_Y - y0 * s)
