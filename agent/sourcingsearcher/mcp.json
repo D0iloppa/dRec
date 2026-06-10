@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y", "@playwright/mcp@latest",
+        "--headless",
+        "--browser", "chromium",
+        "--user-data-dir", "/mnt/c/DEV/docker/agent/sourcingsearcher/profile"
+      ]
+    }
+  }
+}
