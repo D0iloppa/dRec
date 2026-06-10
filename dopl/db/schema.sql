@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS user_inventory (
   acquired_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, item_id)
 );
+ALTER TABLE user_inventory ADD COLUMN IF NOT EXISTS qty INTEGER NOT NULL DEFAULT 1;
 
 -- 플랫폼 설정 key-value 저장 (OAuth API 키 등). 값은 나중에 UPDATE로 채운다.
 CREATE TABLE IF NOT EXISTS dev_config (
@@ -90,6 +91,27 @@ CREATE TABLE IF NOT EXISTS bgm_track (
 CREATE TABLE IF NOT EXISTS wordle_word (
   id   SERIAL PRIMARY KEY,
   word TEXT UNIQUE NOT NULL
+);
+
+-- 펫 종류 카탈로그 (asset=렌더 키, 현재 SVG placeholder — 추후 스프라이트 교체)
+CREATE TABLE IF NOT EXISTS pet_species (
+  code  TEXT PRIMARY KEY,
+  name  TEXT NOT NULL,
+  asset TEXT NOT NULL,
+  price INTEGER NOT NULL DEFAULT 0
+);
+
+-- 유저 펫 (1인 1펫). 스탯은 조회 시 경과시간만큼 감소 반영(lazy tick).
+CREATE TABLE IF NOT EXISTS user_pet (
+  user_id      INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  species_code TEXT NOT NULL REFERENCES pet_species(code),
+  name         TEXT NOT NULL,
+  hunger       INTEGER NOT NULL DEFAULT 80,
+  happiness    INTEGER NOT NULL DEFAULT 80,
+  exp          INTEGER NOT NULL DEFAULT 0,
+  accessory    TEXT,
+  last_tick    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- 친구 관계. pending = requester가 addressee에게 요청한 상태, accepted = 친구.

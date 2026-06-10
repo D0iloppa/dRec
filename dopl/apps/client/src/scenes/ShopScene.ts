@@ -2,6 +2,7 @@
 // 중앙 카테고리 탭 + 아이템 카드(성별 맞춤 착용샷)·구매. 저장하면 입어본 모습 그대로 장착.
 import Phaser from 'phaser';
 import { avatarImgHtml, OVERLAY_ITEMS, type Equipped } from '../avatarRender';
+import { petItemSvg } from '../petSvg';
 import { addCartoonBackdrop } from '../backdrop';
 import { levelOf } from '../level';
 import { bgm } from '../bgm';
@@ -10,8 +11,9 @@ import * as api from '../api';
 interface ShopItem { id: number; code: string; name: string; slot: string; price: number; rarity: string }
 
 const SLOT_TABS: [string, string][] = [
-  ['hair', '💇 헤어'], ['top', '👕 상의'], ['acc', '🎀 소품'],
+  ['hair', '💇 헤어'], ['top', '👕 상의'], ['acc', '🎀 소품'], ['pet', '🐾 펫용품'],
 ];
+const PET_SLOTS = ['pet_food', 'pet_snack', 'pet_acc'];
 const RARITY_COLOR: Record<string, string> = { common: '#64748b', rare: '#2563eb', epic: '#9333ea' };
 
 export class ShopScene extends Phaser.Scene {
@@ -47,7 +49,7 @@ export class ShopScene extends Phaser.Scene {
     void (async () => {
       try {
         const [cat, inv] = await Promise.all([api.getItems(), api.getInventory(this.token)]);
-        this.items = (cat.items as ShopItem[]).filter((i) => OVERLAY_ITEMS.has(i.code));
+        this.items = (cat.items as ShopItem[]).filter((i) => OVERLAY_ITEMS.has(i.code) || PET_SLOTS.includes(i.slot));
         this.owned = new Set((inv.items as ShopItem[]).map((i) => i.code));
         const saved = this.profile?.profile?.avatar?.equipped ?? {};
         this.tryOn = Object.fromEntries(Object.entries(saved).filter(([, c]) => this.items.some((i) => i.code === c))) as Equipped;
@@ -78,8 +80,20 @@ export class ShopScene extends Phaser.Scene {
       ([slot, label]) => `<button class="dx-tab ${this.tab === slot ? 'on' : ''}" data-slot="${slot}">${label}</button>`
     ).join('');
     const cards = this.items
-      .filter((i) => i.slot === this.tab)
+      .filter((i) => (this.tab === 'pet' ? PET_SLOTS.includes(i.slot) : i.slot === this.tab))
       .map((it) => {
+        // 펫용품: 소모품은 항상 구매 가능(수량 누적), 미리보기는 아이콘
+        if (PET_SLOTS.includes(it.slot)) {
+          const consumable = it.slot !== 'pet_acc';
+          const ownedAcc = !consumable && this.owned.has(it.code);
+          return `
+        <div class="dx-card" data-pet="1">
+          <div class="dx-prev pet-ico">${petItemSvg(it.code)}</div>
+          <div class="dx-name" style="color:${RARITY_COLOR[it.rarity] ?? '#333'}">${this.esc(it.name)}</div>
+          ${ownedAcc ? '<span class="dx-badge own">보유</span>' : `<span class="dx-badge price">🪙 ${it.price}</span>`}
+          ${ownedAcc ? '' : `<button class="shop-buy" data-buy="${it.code}">구매</button>`}
+        </div>`;
+        }
         const isOwned = this.owned.has(it.code) || it.price === 0;
         const trying = this.tryOn[it.slot] === it.code;
         const preview = avatarImgHtml({ gender: g, base: this.baseN(), equipped: { ...this.tryOn, [it.slot]: it.code } });
@@ -131,6 +145,7 @@ export class ShopScene extends Phaser.Scene {
     );
     n.querySelectorAll('.dx-card').forEach((el) =>
       el.addEventListener('click', () => {
+        if ((el as HTMLElement).dataset.pet) return; // 펫용품은 입어보기 없음
         const code = (el as HTMLElement).dataset.code!;
         const item = this.items.find((i) => i.code === code);
         if (!item) return;

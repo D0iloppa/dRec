@@ -11,6 +11,7 @@ import { shopRouter } from './shop/routes.js';
 import { wordleRouter } from './mini/wordle.js';
 import { metaRouter } from './meta/routes.js';
 import { friendsRouter } from './friends/routes.js';
+import { petRouter } from './pet/routes.js';
 import { setupRealtime } from './realtime.js';
 
 // 부팅 시 DB 풀 워밍업 — 첫 콜드 연결 실패를 여기서 흡수해 사용자 요청이 겪지 않게 한다.
@@ -50,6 +51,8 @@ app.use('/mini/wordle', wordleRouter);
 app.use('/meta', metaRouter);
 // 친구
 app.use('/friends', friendsRouter);
+// 펫 (다마고치)
+app.use('/pet', petRouter);
 
 const server = createServer(app);
 setupRealtime(server);

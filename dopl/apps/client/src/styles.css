@@ -497,3 +497,69 @@ button.mini { padding: .15rem .5rem; font-size: .75rem; margin-left: .5rem; }
 .base-opt { display: flex; flex-direction: column; align-items: center; width: 60px; height: 92px; }
 .base-opt img { height: 70px; }
 .base-name { font-size: .68rem; font-weight: 900; color: #0f5e9e; }
+
+/* ===== 펫 ===== */
+.pet-adopt { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; padding: 1rem; }
+.pet-adopt h3 { margin: 0; color: #0f5e9e; }
+.pet-species-row { display: flex; gap: 1rem; }
+.pet-species { width: 140px; border: 3px solid #d9ecfa; border-radius: 16px; padding: .8rem .5rem; text-align: center;
+  cursor: pointer; background: linear-gradient(#ffffff, #f4faff); transition: .12s; }
+.pet-species:hover { transform: translateY(-3px); border-color: #3aa4e8; }
+.pet-species.sel { border-color: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,.25); }
+.pet-species-img { width: 90px; height: 104px; margin: 0 auto .4rem; }
+.pet-species b { display: block; color: #0f5e9e; margin-bottom: .3rem; }
+.pet-adopt-form { display: flex; gap: .5rem; }
+.pet-adopt-form input { width: 220px; margin: 0; padding: .55rem .7rem; border: 2px solid #bfe0f7; border-radius: 10px; background: #f6fbff; }
+.pet-care { flex: 1; display: flex; gap: 1rem; padding: 1rem; min-height: 0; }
+.pet-left { width: 250px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: .5rem;
+  background: linear-gradient(#eaf6ff, #d3eafc); border: 2px solid #bfe0f7; border-radius: 16px; padding: 1rem; }
+.pet-big { width: 170px; height: 196px; filter: drop-shadow(0 6px 8px rgba(0,40,90,.25)); }
+.pet-nameline b { color: #0f5e9e; font-size: 1.1rem; }
+.pet-mood { font-weight: 800; color: #5b87a6; }
+.pet-right { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: .5rem; }
+.pet-right h4 { margin: .5rem 0 .1rem; color: #0f5e9e; }
+.pet-gauge { display: flex; align-items: center; gap: .5rem; }
+.pet-gauge-label { width: 84px; font-weight: 900; color: #16435f; }
+.pet-gauge-bar { flex: 1; height: 16px; border-radius: 999px; background: #e2eef8; border: 1px solid #bfe0f7; overflow: hidden; }
+.pet-gauge-fill { height: 100%; border-radius: 999px; transition: width .4s; }
+.pet-gauge-val { width: 30px; text-align: right; font-weight: 900; color: #0f5e9e; }
+.pet-play { align-self: flex-start; }
+.pet-feeds { display: flex; flex-wrap: wrap; gap: .5rem; }
+.pet-feed-btn { display: flex; align-items: center; gap: .45rem; border: 2px solid #bfe2f8; border-radius: 12px;
+  background: linear-gradient(#ffffff, #eef7ff); padding: .4rem .7rem; font-weight: 800; color: #16435f; cursor: pointer; }
+.pet-feed-btn:hover { border-color: #3aa4e8; }
+.pet-feed-btn.on { border-color: #22c55e; background: #f0fdf4; }
+.pet-item-ico { width: 30px; height: 30px; display: inline-block; }
+.dx-prev.pet-ico { width: 56px; height: 56px; margin: .5rem auto .4rem; }
+
+/* ===== 쥬크박스 v2 — 레코드판 플레이어 ===== */
+.jk-player { display: flex; align-items: center; gap: 1rem; padding: .8rem 1rem; background: linear-gradient(#243044, #141c2b);
+  border-bottom: 2px solid #ffd23e; }
+.jk-cover { width: 96px; height: 96px; border-radius: 10px; object-fit: cover; image-rendering: pixelated;
+  box-shadow: 0 4px 10px rgba(0,0,0,.45); flex-shrink: 0; }
+.jk-vinyl-wrap { position: relative; width: 110px; height: 110px; flex-shrink: 0; }
+.jk-vinyl { width: 104px; height: 104px; border-radius: 50%;
+  background: repeating-radial-gradient(circle at center, #111 0 2px, #1f1f1f 2px 4px);
+  box-shadow: 0 3px 8px rgba(0,0,0,.5), inset 0 0 0 3px #000; display: flex; align-items: center; justify-content: center; }
+.jk-vinyl img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid #d4a017; }
+.jk-vinyl.spin { animation: jk-rotate 3.5s linear infinite; }
+@keyframes jk-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.jk-tonearm { position: absolute; top: -4px; right: 2px; width: 7px; height: 56px; background: linear-gradient(#cbd5e1, #94a3b8);
+  border-radius: 4px; transform: rotate(-24deg); transform-origin: top center; box-shadow: 0 2px 4px rgba(0,0,0,.4); }
+.jk-tonearm::after { content: ''; position: absolute; bottom: -8px; left: -3px; width: 13px; height: 12px;
+  background: #e2e8f0; border-radius: 3px; }
+.jk-meta { flex: 1; min-width: 0; color: #fff; }
+.jk-meta b { display: block; font-size: 1.1rem; color: #ffe34d; }
+.jk-meta small { display: block; color: #b8c4d8; margin: .15rem 0 .5rem; }
+.jk-progress { height: 8px; border-radius: 999px; background: rgba(255,255,255,.18); overflow: hidden; }
+.jk-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #ffd23e, #f5a623); border-radius: 999px; transition: width .4s linear; }
+.jk-ctrl-row { display: flex; align-items: center; justify-content: space-between; margin-top: .4rem; }
+.jk-time { font-size: .75rem; color: #b8c4d8; font-variant-numeric: tabular-nums; }
+.jk-ctrls { display: flex; gap: .5rem; align-items: center; }
+.jk-btn { border: none; border-radius: 50%; width: 34px; height: 34px; cursor: pointer; font-size: .95rem;
+  background: rgba(255,255,255,.15); color: #fff; }
+.jk-btn:hover { background: rgba(255,255,255,.3); }
+.jk-btn-main { width: 42px; height: 42px; background: linear-gradient(#ffd23e, #f5a623); color: #4a3000; font-size: 1.1rem;
+  box-shadow: 0 3px 0 #b97a08; }
+.juke-thumb { width: 38px; height: 38px; border-radius: 8px; object-fit: cover; image-rendering: pixelated; cursor: pointer; flex-shrink: 0; }
+.juke-panel { max-width: 600px; }

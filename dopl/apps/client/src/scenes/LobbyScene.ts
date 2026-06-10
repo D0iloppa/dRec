@@ -78,6 +78,7 @@ export class LobbyScene extends Phaser.Scene {
       this.game.registry.events.off('changedata-profile', onReg);
     });
 
+    this.time.addEvent({ delay: 500, loop: true, callback: () => this.updateJuke() });
     this.renderShell();
     this.socket.emit('lobbyRefresh');
     this.updateData();
@@ -135,6 +136,7 @@ export class LobbyScene extends Phaser.Scene {
           <button id="lbShop" class="lb-fn">🛍 상점</button>
           <button id="lbDressRoom" class="lb-fn">👗 분장실</button>
           <button id="lbFriends" class="lb-fn">👥 친구</button>
+          <button id="lbPet" class="lb-fn">🐾 펫</button>
           <button id="lbJuke" class="lb-fn">🎵 쥬크박스</button>
           <button id="lbHelp" class="lb-fn">📖 게임 방법</button>
           <button id="lbBgm" class="lb-fn">${bgm.enabled() ? '🔊 음악 켬' : '🔇 음악 끔'}</button>
@@ -155,6 +157,7 @@ export class LobbyScene extends Phaser.Scene {
     this.$('lbMini')?.addEventListener('click', () => { this.miniList = true; this.renderModal(); });
     this.$('lbJuke')?.addEventListener('click', () => { this.jukeOpen = true; this.renderModal(); });
     this.$('lbFriends')?.addEventListener('click', () => void this.openFriends());
+    this.$('lbPet')?.addEventListener('click', () => this.scene.start('pet'));
     this.$('lbHelp')?.addEventListener('click', () => { this.helpOpen = true; this.renderModal(); });
     this.$('lbBgm')?.addEventListener('click', () => {
       const on = bgm.toggle();
@@ -388,15 +391,17 @@ export class LobbyScene extends Phaser.Scene {
       </div>`;
   }
 
-  // 쥬크박스 — DB 메타(bgm.list) 기반 OST 플레이리스트
+  // 쥬크박스 — 레코드판 플레이어 + OST 리스트 (커버: /bgm/cover/<key>.jpg, 영상 첫 프레임)
   private jukeHtml() {
     const cur = bgm.current();
+    const meta = bgm.list().find((t) => t.key === cur) ?? bgm.list()[0];
     const rows = bgm
       .list()
       .map(
         (t) => `
         <div class="juke-row ${cur === t.key ? 'on' : ''}" data-key="${t.key}">
           <input type="checkbox" class="juke-chk" data-key="${t.key}">
+          <img class="juke-thumb" src="/bgm/cover/${t.key}.jpg" alt="" onerror="this.style.visibility='hidden'">
           <div class="juke-info"><b>${this.esc(t.title)}</b><small>${this.esc(t.desc)}</small></div>
           <button class="juke-play lb-btn lb-btn-green" data-key="${t.key}">▶</button>
         </div>`
@@ -406,6 +411,29 @@ export class LobbyScene extends Phaser.Scene {
       <div class="modal-bg" id="mBg">
         <div class="mini-panel juke-panel">
           <header class="dx-head"><b>🎵 쥬크박스</b><span class="dx-sub">DOPL OST — 골라 듣는 배경음악</span><button id="mCancel" class="dx-close">✕</button></header>
+          <div class="jk-player">
+            <img id="jkCover" class="jk-cover" src="/bgm/cover/${meta?.key ?? 'main'}.jpg" alt="">
+            <div class="jk-vinyl-wrap">
+              <div id="jkVinyl" class="jk-vinyl ${bgm.paused() ? '' : 'spin'}">
+                <img id="jkVinylCover" src="/bgm/cover/${meta?.key ?? 'main'}.jpg" alt="">
+              </div>
+              <div class="jk-tonearm"></div>
+            </div>
+            <div class="jk-meta">
+              <b id="jkTitle">${this.esc(meta?.title ?? '')}</b>
+              <small id="jkDesc">${this.esc(meta?.desc ?? '')}</small>
+              <div class="jk-progress"><div id="jkBar" class="jk-bar"></div></div>
+              <div class="jk-ctrl-row">
+                <span id="jkTime" class="jk-time">0:00</span>
+                <div class="jk-ctrls">
+                  <button id="jkPrev" class="jk-btn">⏮</button>
+                  <button id="jkPlay" class="jk-btn jk-btn-main">${bgm.paused() ? '▶' : '⏸'}</button>
+                  <button id="jkNext" class="jk-btn">⏭</button>
+                </div>
+                <span id="jkDur" class="jk-time">0:00</span>
+              </div>
+            </div>
+          </div>
           <div class="juke-list">${rows || '<div class="lb-empty">트랙 정보를 불러오지 못했어요</div>'}</div>
           <footer class="dx-foot">
             <button id="jukeQueue" class="lb-btn lb-btn-amber">☑ 선택한 곡 이어듣기</button>
@@ -415,7 +443,38 @@ export class LobbyScene extends Phaser.Scene {
       </div>`;
   }
 
+  // 쥬크박스 부분 갱신 — 진행바/회전/현재 곡 표시 (체크박스 보존 위해 재렌더 없이)
+  private updateJuke() {
+    if (!this.jukeOpen) return;
+    const host = this.$('lbModal');
+    if (!host || !host.querySelector('.jk-player')) return;
+    const cur = bgm.current();
+    const meta = bgm.list().find((t) => t.key === cur);
+    const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+    const { t, d } = bgm.progress();
+    const set = (id: string, fn: (el: HTMLElement) => void) => {
+      const el = host.querySelector('#' + id) as HTMLElement | null;
+      if (el) fn(el);
+    };
+    set('jkBar', (el) => { el.style.width = d ? `${(t / d) * 100}%` : '0%'; });
+    set('jkTime', (el) => { el.textContent = fmt(t); });
+    set('jkDur', (el) => { el.textContent = d ? fmt(d) : '-:--'; });
+    set('jkPlay', (el) => { el.textContent = bgm.paused() ? '▶' : '⏸'; });
+    set('jkVinyl', (el) => el.classList.toggle('spin', !bgm.paused()));
+    if (meta) {
+      set('jkTitle', (el) => { el.textContent = meta.title; });
+      set('jkDesc', (el) => { el.textContent = meta.desc; });
+      set('jkCover', (el) => { const src = `/bgm/cover/${meta.key}.jpg`; if (!(el as HTMLImageElement).src.endsWith(src)) (el as HTMLImageElement).src = src; });
+      set('jkVinylCover', (el) => { const src = `/bgm/cover/${meta.key}.jpg`; if (!(el as HTMLImageElement).src.endsWith(src)) (el as HTMLImageElement).src = src; });
+    }
+    host.querySelectorAll('.juke-row').forEach((el) =>
+      el.classList.toggle('on', (el as HTMLElement).dataset.key === cur)
+    );
+  }
+
   private helpHtml() {
+
+
     return `
       <div class="modal-bg" id="mBg">
         <div class="mini-panel help-panel">
@@ -497,28 +556,30 @@ export class LobbyScene extends Phaser.Scene {
         api.friendRemove(this.token, (el as HTMLElement).dataset.nick!).then(reloadFriends).catch(() => {}))
     );
 
-    // 쥬크박스 — 단곡 재생 / 선택 곡 이어듣기 (재생 중 곡 하이라이트는 수동 갱신: 체크박스 보존)
-    const markPlaying = () => {
-      host.querySelectorAll('.juke-row').forEach((el) =>
-        el.classList.toggle('on', (el as HTMLElement).dataset.key === bgm.current())
-      );
-    };
+    // 쥬크박스 — 플레이어 컨트롤 + 단곡/이어듣기
     host.querySelectorAll('.juke-play').forEach((el) =>
-      el.addEventListener('click', () => {
-        bgm.play((el as HTMLElement).dataset.key!);
-        markPlaying();
-      })
+      el.addEventListener('click', () => { bgm.play((el as HTMLElement).dataset.key!); this.updateJuke(); })
     );
+    host.querySelectorAll('.juke-row .juke-thumb, .juke-row .juke-info').forEach((el) =>
+      el.addEventListener('click', () => { bgm.play((el.closest('.juke-row') as HTMLElement).dataset.key!); this.updateJuke(); })
+    );
+    host.querySelector('#jkPlay')?.addEventListener('click', () => {
+      if (bgm.paused()) bgm.resume();
+      else bgm.pause();
+      this.updateJuke();
+    });
+    host.querySelector('#jkPrev')?.addEventListener('click', () => { bgm.step(-1); this.updateJuke(); });
+    host.querySelector('#jkNext')?.addEventListener('click', () => { bgm.step(1); this.updateJuke(); });
     host.querySelector('#jukeQueue')?.addEventListener('click', () => {
       const keys = [...host.querySelectorAll('.juke-chk:checked')].map((el) => (el as HTMLElement).dataset.key!);
       if (keys.length) {
         bgm.playList(keys);
-        markPlaying();
+        this.updateJuke();
       }
     });
     host.querySelector('#jukeStop')?.addEventListener('click', () => {
       bgm.play('lobby');
-      markPlaying();
+      this.updateJuke();
     });
 
     host.querySelectorAll('.mini-card[data-mini]').forEach((el) =>

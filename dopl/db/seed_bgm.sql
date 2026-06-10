@@ -1,6 +1,6 @@
 -- 배경음악 메타 시드. 곡 제목 = 원본 파일명 기준. 재적용 시 메타 갱신(UPSERT).
 INSERT INTO bgm_track (key, title, descr, file, sort) VALUES
-  ('main',       'Main Theme',              '🏠 메인(로그인) 화면 — DOPL의 첫인상',          'main_bgm.mp3',        1),
+  ('main',       '점프 점프',               '🏠 메인(로그인) 화면 — DOPL의 첫인상',          'main_bgm.mp3',        1),
   ('lobby',      'Before the Clock Starts', '🎮 로비 — 게임이 시작되기 전의 설렘',           'lobby_bgm.mp3',       2),
   ('shop',       'Before The Clock Stops',  '🛍 상점 — 시간 가는 줄 모르는 쇼핑',            'shop_bgm.mp3',        3),
   ('dress',      'Velvet Stitch',           '👗 분장실 — 한 땀 한 땀 나만의 스타일',         'dress_bgm.mp3',       4),

@@ -69,6 +69,29 @@ window.addEventListener('keydown', tryPlay);
 (window as unknown as Record<string, unknown>).__doplBgm = audio;
 
 export const bgm = {
+  // 쥬크박스 플레이어 제어
+  pause(): void {
+    wantPlaying = false;
+    audio.pause();
+  },
+  resume(): void {
+    wantPlaying = true;
+    tryPlay();
+  },
+  paused(): boolean {
+    return audio.paused;
+  },
+  // 재생 위치 (진행바용)
+  progress(): { t: number; d: number } {
+    return { t: audio.currentTime || 0, d: audio.duration || 0 };
+  },
+  // META 순서 기준 다음/이전 곡 (루프 유지)
+  step(dir: 1 | -1): void {
+    if (!META.length) return;
+    const idx = Math.max(0, META.findIndex((m) => m.key === currentKey));
+    const next = META[(idx + dir + META.length) % META.length]!;
+    this.play(next.key);
+  },
   // 단일 트랙 루프 재생 (씬 자동 BGM·쥬크박스 단곡)
   play(key: string): void {
     queue = [];

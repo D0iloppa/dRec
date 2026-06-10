@@ -5,6 +5,7 @@ import type { Socket } from 'socket.io-client';
 import { LobbyScene } from '../scenes/LobbyScene';
 import { ShopScene } from '../scenes/ShopScene';
 import { DressScene } from '../scenes/DressScene';
+import { PetScene } from '../scenes/PetScene';
 
 export default function PhaserLobby({
   socket, games, profile, token, onLogout, refreshProfile,
@@ -26,7 +27,7 @@ export default function PhaserLobby({
       dom: { createContainer: true },
       scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.NO_CENTER },
       // 로비/상점/분장실 — 같은 게임 인스턴스 안에서 씬 전환(별도 페이지)
-      scene: [new LobbyScene(), new ShopScene(), new DressScene()],
+      scene: [new LobbyScene(), new ShopScene(), new DressScene(), new PetScene()],
     });
     game.registry.set('socket', socket);
     game.registry.set('games', games);

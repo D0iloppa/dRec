@@ -16,9 +16,12 @@ GRANT SELECT ON quiz_question, quiz_mc_question, quiz_text_question TO dopl;
 GRANT SELECT ON wordle_word TO dopl;
 GRANT SELECT ON bgm_track TO dopl;
 GRANT SELECT, INSERT ON mini_result TO dopl;
+-- 펫: 종류 읽기 + 펫 읽기·쓰기
+GRANT SELECT ON pet_species TO dopl;
+GRANT SELECT, INSERT, UPDATE, DELETE ON user_pet TO dopl;
 -- 친구 관계: 읽기·쓰기
 GRANT SELECT, INSERT, UPDATE, DELETE ON friendship TO dopl;
 GRANT SELECT ON dev_config TO dopl;
 GRANT SELECT ON item TO dopl;
-GRANT SELECT, INSERT, DELETE ON user_inventory TO dopl;
+GRANT SELECT, INSERT, UPDATE, DELETE ON user_inventory TO dopl;
 GRANT USAGE, SELECT ON SEQUENCE users_id_seq TO dopl;

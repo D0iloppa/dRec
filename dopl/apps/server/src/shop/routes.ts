@@ -45,19 +45,27 @@ shopRouter.post('/buy', requireAuth, async (req: AuthedRequest, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { rows: irows } = await client.query('SELECT id, price FROM item WHERE id = $1 AND enabled', [itemId]);
+    const { rows: irows } = await client.query('SELECT id, price, slot FROM item WHERE id = $1 AND enabled', [itemId]);
     const item = irows[0];
     if (!item) { await client.query('ROLLBACK'); res.status(404).json({ error: '아이템을 찾을 수 없습니다.' }); return; }
 
-    const { rows: owned } = await client.query('SELECT 1 FROM user_inventory WHERE user_id = $1 AND item_id = $2', [uid, itemId]);
-    if (owned[0]) { await client.query('ROLLBACK'); res.status(409).json({ error: '이미 보유한 아이템입니다.' }); return; }
+    // 소모품(펫 먹이/간식)은 수량 누적 구매, 그 외는 1회 보유
+    const consumable = item.slot === 'pet_food' || item.slot === 'pet_snack';
+    if (!consumable) {
+      const { rows: owned } = await client.query('SELECT 1 FROM user_inventory WHERE user_id = $1 AND item_id = $2', [uid, itemId]);
+      if (owned[0]) { await client.query('ROLLBACK'); res.status(409).json({ error: '이미 보유한 아이템입니다.' }); return; }
+    }
 
     const { rows: wrows } = await client.query('SELECT coins FROM user_wallet WHERE user_id = $1 FOR UPDATE', [uid]);
     const coins = wrows[0]?.coins ?? 0;
     if (coins < item.price) { await client.query('ROLLBACK'); res.status(402).json({ error: '코인이 부족합니다.' }); return; }
 
     await client.query('UPDATE user_wallet SET coins = coins - $2, updated_at = now() WHERE user_id = $1', [uid, item.price]);
-    await client.query('INSERT INTO user_inventory(user_id, item_id) VALUES($1, $2)', [uid, itemId]);
+    await client.query(
+      `INSERT INTO user_inventory(user_id, item_id, qty) VALUES($1, $2, 1)
+       ON CONFLICT (user_id, item_id) DO UPDATE SET qty = user_inventory.qty + 1`,
+      [uid, itemId]
+    );
     await client.query('COMMIT');
     res.json({ ok: true, coins: coins - item.price });
   } catch (e) {
