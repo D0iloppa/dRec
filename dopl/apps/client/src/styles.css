@@ -231,17 +231,21 @@ button.mini { padding: .15rem .5rem; font-size: .75rem; margin-left: .5rem; }
 .prof-iq { color: #16a34a; font-weight: 900; margin-bottom: 1rem; }
 
 /* ===== 꾸미기 & 상점 / 미니게임 패널 공통 헤더 ===== */
-.dx-head { display: flex; align-items: center; gap: .8rem; padding: .6rem .9rem;
+.dx-head { display: flex; align-items: center; gap: .8rem; padding: .6rem 3.2rem .6rem .9rem;
   background: linear-gradient(#5fbdf6, #1d7fc4 60%, #15659f); color: #fff; font-size: 1.05rem;
   border-bottom: 2px solid #ffd23e; box-shadow: inset 0 2px 0 rgba(255,255,255,.4); }
 .dx-head b { flex: 1; text-shadow: 0 1px 1px rgba(0,0,0,.3); }
 .dx-sub { font-size: .76rem; color: #ffe9a8; font-weight: 700; }
 .dx-coins { background: linear-gradient(#fff, #ffeebf); color: #b45309; font-weight: 900; border-radius: 999px; padding: .2rem .7rem;
   border: 1px solid #e3b04b; box-shadow: inset 0 1px 0 #fff; }
-.dx-close { background: rgba(255,255,255,.25); border: 1px solid rgba(255,255,255,.4); color: #fff; font-size: 1rem; font-weight: 900;
-  border-radius: 8px; width: 30px; height: 30px; cursor: pointer; }
+/* 닫기 버튼 — 모든 모달 공통: 패널 우상단 고정(헤더 내용과 무관), 원형, hover 빨강 */
+.dx-close { position: absolute; top: 9px; right: 10px; width: 34px; height: 34px; border-radius: 50%;
+  background: rgba(255,255,255,.22); border: 2px solid rgba(255,255,255,.5); color: #fff;
+  font-size: 1rem; font-weight: 900; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  line-height: 1; transition: .12s; z-index: 2; }
+.dx-close:hover { background: #ef4444; border-color: #fff; transform: rotate(90deg); }
 
-.dx { width: 92vw; max-width: 760px; height: 86vh; max-height: 580px; display: flex; flex-direction: column;
+.dx { position: relative; width: 92vw; max-width: 760px; height: 86vh; max-height: 580px; display: flex; flex-direction: column;
   background: #fff; border: 3px solid #0f5e9e; border-radius: 18px; overflow: hidden;
   box-shadow: 0 0 0 4px rgba(255,255,255,.4), 0 16px 36px rgba(0,40,90,.5); color: #16435f; }
 .dx-body { flex: 1; display: flex; min-height: 0; }
@@ -271,7 +275,7 @@ button.mini { padding: .15rem .5rem; font-size: .75rem; margin-left: .5rem; }
 .dx-msg { color: #0f5e9e; font-weight: 700; font-size: .85rem; }
 
 /* ===== 미니게임 ===== */
-.mini-panel { width: 92vw; max-width: 620px; max-height: 88vh; display: flex; flex-direction: column;
+.mini-panel { position: relative; width: 92vw; max-width: 620px; max-height: 88vh; display: flex; flex-direction: column;
   background: #fff; border: 3px solid #0f5e9e; border-radius: 18px; overflow: hidden;
   box-shadow: 0 0 0 4px rgba(255,255,255,.4), 0 16px 36px rgba(0,40,90,.5); color: #16435f; }
 .mini-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .7rem; padding: .9rem; overflow-y: auto; }
@@ -411,7 +415,7 @@ button.mini { padding: .15rem .5rem; font-size: .75rem; margin-left: .5rem; }
 .pcard-xp small { color: #5b87a6; font-weight: 700; }
 
 /* ===== 상점/분장실 페이지 (별도 씬) ===== */
-.page-panel { width: 96vw; max-width: 1000px; height: 92vh; max-height: 700px; display: flex; flex-direction: column;
+.page-panel { position: relative; width: 96vw; max-width: 1000px; height: 92vh; max-height: 700px; display: flex; flex-direction: column;
   background: #fff; border: 3px solid #0f5e9e; border-radius: 20px; overflow: hidden; color: #16435f; font-size: 14px;
   box-shadow: 0 0 0 4px rgba(255,255,255,.65), 0 0 0 7px rgba(31,119,184,.35), 0 18px 44px rgba(0,50,110,.45); }
 .page-panel .dx-head { font-size: 1.15rem; }
