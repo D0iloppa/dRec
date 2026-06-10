@@ -392,6 +392,37 @@ def diff_overlay(base_png: bytes, wear_png: bytes, thr: int = 90) -> bytes:
     return buf.getvalue()
 
 
+# 게임 카탈로그 키비주얼 (방 만들기 카드용) — 캐릭터 톤과 같은 레트로 도트 일러스트
+GAME_CARDS = {
+    "ox-quiz": "A quiz game key visual: a giant blue O panel and a red X panel on a game-show stage, "
+               "spotlights, tense crowd silhouettes below",
+    "common-quiz": "A quiz game key visual: four colorful answer cards (1,2,3,4) floating over a podium, "
+                   "a glowing light bulb above, confetti",
+    "speed-quiz": "A typing speed-quiz key visual: a lightning bolt striking a retro keyboard, "
+                  "racing speech bubbles with Korean consonant hints, speed lines",
+    "mafia": "A mafia party game key visual: a noir night city, full moon, a mysterious fedora-wearing "
+             "silhouette holding a knife behind his back, dramatic shadows",
+}
+
+
+def cmd_gamecard(args):
+    """게임 키비주얼 생성 — public/games/<type>.png 로 쓸 카드 아트 (배경 유지, 투명화 없음)."""
+    out_dir = OUT_ROOT / "games"
+    for t, desc in GAME_CARDS.items():
+        if args.code and args.code != t:
+            continue
+        prompt = (
+            desc + ". Retro early-2000s Korean online game illustration in detailed pixel art (dot art) style, "
+            "vivid saturated colors, dark bold outlines, dynamic composition, landscape orientation, "
+            "no text, no logo, no watermark, fills the entire frame edge to edge."
+        )
+        print(f"[gamecard {t}] 생성 중…")
+        png = gen_image(prompt)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / f"{t}.png").write_bytes(png)
+        print(f"  → assets_gen/games/{t}.png")
+
+
 def cmd_refine(args):
     """보관된 착용 시트(sheet_wear_*)에서 overlay를 재추출 — API 비용 없이 깨짐 보정 적용.
     시트에 없던 패널(단일 폴백으로 만든 것)은 기존 파일을 유지한다."""
@@ -539,69 +570,62 @@ def cmd_compose(args):
 
 
 def cmd_promote(args):
-    """v2 산출물을 client public으로 승격 — base+overlay를 '같은 박스'로 크롭해 정렬 유지.
-    슬라이스 경계의 패널 라인 잔재를 제거하고, 밀도 기반 bbox(가는 노이즈 무시)로 자른다."""
+    """v2 산출물을 client public으로 승격 — 아바타 표준 규격으로 정규화.
+    표준(작은 아바타 룩 = 남 b1/b3 기준): 캔버스 320x480, 머리폭(헤어 포함 상단 최대폭) 195px,
+    콘텐츠 상단을 y=88에 고정(top-anchor, 위 88px는 왕관/모자 여유), 하단 초과분은 잘림(버스트컷).
+    base 1세트(베이스+overlay)는 같은 배율·오프셋으로 변환해 레이어 정렬을 보존한다."""
+    STD_W, STD_H = 320, 480
+    STD_HEAD_W = 195
+    TOP_Y = 88
     pub_root = HERE.parent.parent / "apps" / "client" / "public" / "avatar"
     for g in args.genders:
         gdir = V2_ROOT / g
-        plans = []  # (i, imgs, box) — 1차로 박스 계산 후 높이 통일해서 2차 크롭
         for i in (1, 2, 3):
             base_p = gdir / f"base{i}.png"
             if not base_p.exists():
                 continue
             layers = [("base", base_p)] + [
-                (p.stem.replace(f"overlay_", "").replace(f"_b{i}", ""), p)
+                (p.stem.replace("overlay_", "").replace(f"_b{i}", ""), p)
                 for p in sorted(gdir.glob(f"overlay_*_b{i}.png"))
             ]
             imgs = {}
-            W = H = None
             for name, p in layers:
                 img = Image.open(p).convert("RGBA")
                 W, H = img.size
                 px = img.load()
-                # 슬라이스 경계의 패널 라인 잔재 제거 — 가장자리 16px 안쪽의 '세로 줄'
-                # (높이 60% 이상 불투명한 칼럼은 캐릭터가 아니라 패널 구분선이다)
                 ad = img.getchannel("A").load()
+                # 슬라이스 경계의 패널 라인 잔재 제거
                 for x in list(range(min(16, W))) + list(range(max(0, W - 16), W)):
                     cnt = sum(1 for y in range(H) if ad[x, y] > 0)
                     if cnt > H * 0.6:
                         for y in range(H):
                             px[x, y] = (0, 0, 0, 0)
                 imgs[name] = img
-            # 밀도 기반 union bbox — 한 줄에 12px 이상 불투명해야 콘텐츠로 인정
-            rows = [0] * H
-            cols = [0] * W
-            for img in imgs.values():
-                a = img.getchannel("A")
-                data = a.load()
-                for y in range(H):
-                    for x in range(W):
-                        if data[x, y] > 0:
-                            rows[y] += 1
-                            cols[x] += 1
+            base_img = imgs["base"]
+            a = base_img.getchannel("A").load()
+            W, H = base_img.size
+            rows = [sum(1 for x in range(W) if a[x, y] > 0) for y in range(H)]
+            cols = [sum(1 for y in range(H) if a[x, y] > 0) for x in range(W)]
             ys = [y for y in range(H) if rows[y] >= 12]
             xs = [x for x in range(W) if cols[x] >= 12]
             if not ys or not xs:
-                print(f"  ⚠ {g}/b{i}: 콘텐츠 없음 — 건너뜀")
+                print(f"  ⚠ {g}/b{i}: base 콘텐츠 없음 — 건너뜀")
                 continue
-            pad = 10
-            box = [max(0, min(xs) - pad), max(0, min(ys) - pad), min(W, max(xs) + pad), min(H, max(ys) + pad)]
-            plans.append((i, imgs, box, W, H))
-        if not plans:
-            continue
-        # 캔버스 높이 통일 — 캐릭터 스케일이 base마다 달라 보이는 문제 방지 (위쪽으로 확장, 캔버스 내 클램프)
-        max_h = max(b[3] - b[1] for _, _, b, _, _ in plans)
-        for i, imgs, box, W, H in plans:
-            need = max_h - (box[3] - box[1])
-            if need > 0:
-                up = min(need, box[1])
-                box[1] -= up
-                box[3] = min(H, box[3] + (need - up))
+            y0, y1, x0, x1 = min(ys), max(ys) + 1, min(xs), max(xs) + 1
+            ch = y1 - y0
+            head_w = max(rows[y] for y in range(y0 + int(ch * 0.08), y0 + int(ch * 0.30)))
+            s = STD_HEAD_W / head_w
+            cx = ((x0 + x1) / 2) * s
+            ox = round(STD_W / 2 - cx)
+            oy = round(TOP_Y - y0 * s)
             out_dir = pub_root / g / f"b{i}"
             out_dir.mkdir(parents=True, exist_ok=True)
             for name, img in imgs.items():
-                img.crop(tuple(box)).save(out_dir / f"{name}.png")
-            print(f"  → public/avatar/{g}/b{i}/ ({len(imgs)}개 레이어, box={tuple(box)}, h={box[3]-box[1]})")
+                scaled = img.resize((max(1, round(img.width * s)), max(1, round(img.height * s))), Image.NEAREST)
+                canvas = Image.new("RGBA", (STD_W, STD_H), (0, 0, 0, 0))
+                canvas.paste(scaled, (ox, oy), scaled)
+                canvas.save(out_dir / f"{name}.png")
+            print(f"  → public/avatar/{g}/b{i}/ ({len(imgs)}개, head_w {head_w}→{STD_HEAD_W} scale={s:.2f})")
 
 
 # 게임 카탈로그 키비주얼 (방 만들기 카드용) — 캐릭터 톤과 같은 레트로 도트 일러스트
@@ -634,6 +658,151 @@ def cmd_gamecard(args):
         (out_dir / f"{t}.png").write_bytes(png)
         print(f"  → assets_gen/games/{t}.png")
 
+
+def cmd_refine(args):
+    """보관된 착용 시트(sheet_wear_*)에서 overlay를 재추출 — API 비용 없이 깨짐 보정 적용.
+    시트에 없던 패널(단일 폴백으로 만든 것)은 기존 파일을 유지한다."""
+    for g in args.genders:
+        sheet = v2_sheet_path(g)
+        if not sheet.exists():
+            continue
+        base_parts = slice3(sheet.read_bytes())
+        for wear_p in sorted((V2_ROOT / g).glob("sheet_wear_*.png")):
+            code = wear_p.stem.replace("sheet_wear_", "")
+            if args.code and args.code != code:
+                continue
+            wear_parts = slice3(wear_p.read_bytes())
+            for i in range(3):
+                # 단일 폴백 착용샷이 있으면 그것을 우선 사용 (시트보다 그 base에 정확)
+                single_p = V2_ROOT / g / f"wear_{code}_b{i + 1}.png"
+                src = single_p.read_bytes() if single_p.exists() else wear_parts[i]
+                ov = diff_overlay(base_parts[i], src)
+                p = V2_ROOT / g / f"overlay_{code}_b{i + 1}.png"
+                if is_ghost(ov):
+                    print(f"  [{code}:{g} b{i + 1}] 아이템 없음 — 기존 overlay 유지")
+                    continue
+                p.write_bytes(ov)
+                print(f"  → {p.relative_to(OUT_ROOT.parent)} (재추출)")
+
+
+def is_ghost(overlay_png: bytes) -> bool:
+    """아이템이 실제로 그려졌는지 판별 — 고스트(윤곽 노이즈)는 바운딩박스 대비 픽셀 밀도가 낮다."""
+    img = Image.open(io.BytesIO(overlay_png)).convert("RGBA")
+    alpha = img.getchannel("A")
+    bbox = alpha.getbbox()
+    if not bbox:
+        return True  # 완전 빈 overlay
+    visible = sum(1 for a in alpha.getdata() if a > 0)
+    if visible < 800:
+        return True  # 사실상 빈 overlay
+    area = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
+    return area == 0 or visible / area < 0.12
+
+
+def wear_edit_prompt(item: dict, multi: bool) -> str:
+    target = (
+        "It contains 3 character portraits in 3 vertical panels. "
+        "Put this on ALL 3 characters — every single panel MUST clearly show the item: "
+        if multi
+        else "It contains one character portrait. Put this on the character: "
+    )
+    return (
+        "Edit the reference image. " + target + f"{item['prompt']}. "
+        "CRITICAL: keep everything else EXACTLY identical to the reference — same canvas size, "
+        "same layout, same character positions, same faces, same bodies, same colors, "
+        "same flat magenta background (#FF00FF). Change nothing except adding the item. "
+        "Same retro pixel art style. No text."
+    )
+
+
+
+def torso_coverage(ov_png: bytes) -> float:
+    """상의 overlay의 몸통 중앙부(폭 25~75%, 높이 45~90%) 불투명 비율 — 뚫린 옷 감지용."""
+    img = Image.open(io.BytesIO(ov_png)).convert("RGBA")
+    a = img.getchannel("A")
+    bbox = a.getbbox()
+    if not bbox:
+        return 0.0
+    x0, y0, x1, y1 = bbox
+    cx0 = x0 + int((x1 - x0) * 0.25)
+    cx1 = x0 + int((x1 - x0) * 0.75)
+    cy0 = y0 + int((y1 - y0) * 0.45)
+    cy1 = y0 + int((y1 - y0) * 0.90)
+    ad = a.load()
+    total = vis = 0
+    for y in range(cy0, cy1):
+        for x in range(cx0, cx1):
+            total += 1
+            if ad[x, y] > 0:
+                vis += 1
+    return vis / total if total else 0.0
+
+
+def cmd_overlay(args):
+    """아이템 overlay — base 시트를 '아이템을 입힌 모습'으로 편집 생성(시트 1요청)하고
+    base와의 픽셀 diff로 아이템 레이어만 추출. 모델이 일부 패널에 아이템을 빠뜨리면
+    (고스트 감지) 해당 base만 단일 편집으로 폴백 재생성한다."""
+    items = {i["code"]: i for i in load_items()}
+    if args.code not in items:
+        sys.exit(f"items.json에 없는 코드: {args.code}")
+    item = items[args.code]
+    for g in args.genders:
+        sheet = v2_sheet_path(g)
+        if not sheet.exists():
+            sys.exit(f"base 시트가 없습니다: {sheet} — 먼저 `python3 assetgen.py bases` 실행")
+        raw = sheet.read_bytes()
+        print(f"[overlay {item['code']}:{g}] 착용 시트 생성 중…")
+        wear = gen_image(wear_edit_prompt(item, multi=True), ref_images=[raw])
+        (V2_ROOT / g / f"sheet_wear_{item['code']}.png").write_bytes(wear)
+        base_parts = slice3(raw)
+        wear_parts = slice3(wear)
+        for i in range(3):
+            ov = diff_overlay(base_parts[i], wear_parts[i])
+            if is_ghost(ov):
+                # 폴백: 이 base 한 장만 단일 편집 → diff
+                print(f"  [b{i + 1}] 시트에서 누락 감지 — 단일 base로 재생성")
+                single = gen_image(wear_edit_prompt(item, multi=False), ref_images=[base_parts[i]])
+                (V2_ROOT / g / f"wear_{item['code']}_b{i + 1}.png").write_bytes(single)
+                ov = diff_overlay(base_parts[i], single)
+                if is_ghost(ov):
+                    print(f"  ⚠ b{i + 1} 재생성도 실패 — 수동 확인 필요")
+            # 품질 게이트: 상의는 몸통이 충분히 덮여야 함 (뚫린 옷 → 자동 재생성)
+            if item["slot"] == "top":
+                best, best_cov = ov, torso_coverage(ov)
+                tries = 0
+                while best_cov < 0.85 and tries < 3:
+                    tries += 1
+                    print(f"  [b{i + 1}] 몸통 커버리지 {best_cov:.2f} < 0.85 — 재생성 {tries}/3")
+                    single = gen_image(wear_edit_prompt(item, multi=False), ref_images=[base_parts[i]])
+                    cand = diff_overlay(base_parts[i], single)
+                    cov = torso_coverage(cand)
+                    if cov > best_cov:
+                        best, best_cov = cand, cov
+                        (V2_ROOT / g / f"wear_{item['code']}_b{i + 1}.png").write_bytes(single)
+                ov = best
+                print(f"  [b{i + 1}] 최종 몸통 커버리지 {best_cov:.2f}")
+            p = V2_ROOT / g / f"overlay_{item['code']}_b{i + 1}.png"
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(ov)
+            print(f"  → {p.relative_to(OUT_ROOT.parent)}")
+
+
+def cmd_compose(args):
+    """QA용 — base{n} 위에 overlay들을 합성한 미리보기 생성."""
+    g = args.genders[0]
+    base = V2_ROOT / g / f"base{args.base}.png"
+    if not base.exists():
+        sys.exit(f"없음: {base}")
+    img = Image.open(base).convert("RGBA")
+    for code in args.codes:
+        ov_path = V2_ROOT / g / f"overlay_{code}_b{args.base}.png"
+        if not ov_path.exists():
+            sys.exit(f"overlay 없음: {ov_path}")
+        ov = Image.open(ov_path).convert("RGBA").resize(img.size)
+        img = Image.alpha_composite(img, ov)
+    out = V2_ROOT / g / f"preview_b{args.base}_{'_'.join(args.codes)}.png"
+    img.save(out)
+    print(f"  → {out.relative_to(OUT_ROOT.parent)}")
 
 
 def acc_position_ok(code: str, base_png: bytes, ov_png: bytes) -> bool:
@@ -679,6 +848,79 @@ def cmd_audit(args):
                 bad.append(f"{g}:{code}:b{bi}")
     print()
     print("재생성 필요:", len(bad), "→", " ".join(bad) if bad else "없음")
+
+
+
+# 머리 위 액세서리 배치 규칙 — (head_w 대비 폭비, 머리와 세로 겹침 = 아이템 높이 비)
+ACC_PLACE_RULES = {
+    "acc_crown": {"w_ratio": 0.60, "overlap": 0.25},
+}
+
+
+def cmd_accplace(args):
+    """'재해석형' 착용샷(diff 불가)에서 머리 위 액세서리만 분리해 base에 규칙 배치.
+    분리: 콘텐츠 상단에서 행 폭이 급증(머리 시작)하기 전까지를 아이템으로 본다."""
+    rule = ACC_PLACE_RULES.get(args.code)
+    if not rule:
+        sys.exit(f"배치 규칙 없음: {args.code} (보유: {', '.join(ACC_PLACE_RULES)})")
+    for g in args.genders:
+        for i in (1, 2, 3):
+            wear_p = V2_ROOT / g / f"wear_{args.code}_b{i}.png"
+            base_p = V2_ROOT / g / f"base{i}.png"
+            if not wear_p.exists() or not base_p.exists():
+                print(f"  [{g} b{i}] 착용샷 없음 — 건너뜀")
+                continue
+            wear = Image.open(io.BytesIO(chroma_key(wear_p.read_bytes()))).convert("RGBA")
+            wa = wear.getchannel("A").load()
+            WW, WH = wear.size
+            roww = [sum(1 for x in range(WW) if wa[x, y] > 0) for y in range(WH)]
+            ys = [y for y in range(WH) if roww[y] >= 4]
+            if not ys:
+                print(f"  [{g} b{i}] 콘텐츠 없음")
+                continue
+            y_t = min(ys)
+            # 머리 시작 지점: 행 폭이 전체 최대폭(어깨)의 35%를 넘는 첫 행
+            wmax = max(roww)
+            y_jump = None
+            for y in range(y_t, min(WH, y_t + WH // 2)):
+                if roww[y] > wmax * 0.35:
+                    y_jump = y
+                    break
+            if not y_jump or y_jump <= y_t + 4:
+                print(f"  [{g} b{i}] 아이템/머리 경계 못 찾음")
+                continue
+            xs_item = [x for x in range(WW) for y in range(y_t, y_jump) if wa[x, y] > 0]
+            ib = (min(xs_item), y_t, max(xs_item) + 1, y_jump)
+            item = wear.crop(ib)
+            # base 머리 정보
+            base = Image.open(base_p).convert("RGBA")
+            ba = base.getchannel("A").load()
+            BW, BH = base.size
+            brow = [sum(1 for x in range(BW) if ba[x, y] > 0) for y in range(BH)]
+            bys = [y for y in range(BH) if brow[y] >= 12]
+            if not bys:
+                continue
+            b_top = min(bys)
+            ch = max(bys) - b_top
+            head_zone = range(b_top + int(ch * 0.05), b_top + int(ch * 0.30))
+            head_w = max(brow[y] for y in head_zone)
+            # 머리 중심 x: head_zone에서 가장 넓은 행의 콘텐츠 중심
+            best_y = max(head_zone, key=lambda y: brow[y])
+            bxs = [x for x in range(BW) if ba[x, best_y] > 0]
+            head_cx = (min(bxs) + max(bxs)) / 2
+            # 스케일·배치
+            sc = (head_w * rule["w_ratio"]) / item.width
+            item_s = item.resize((max(1, round(item.width * sc)), max(1, round(item.height * sc))), Image.NEAREST)
+            ox = round(head_cx - item_s.width / 2)
+            oy = round(b_top + item_s.height * rule["overlap"] - item_s.height)
+            canvas = Image.new("RGBA", (BW, BH), (0, 0, 0, 0))
+            canvas.paste(item_s, (ox, oy), item_s)
+            out = V2_ROOT / g / f"overlay_{args.code}_b{i}.png"
+            out.write_bytes(__import__("io").BytesIO().getvalue() or b"") if False else None
+            buf = io.BytesIO()
+            canvas.save(buf, format="PNG")
+            out.write_bytes(buf.getvalue())
+            print(f"  → {out.relative_to(OUT_ROOT.parent)} (item {item.width}x{item.height}, scale={sc:.2f})")
 
 
 def cmd_rekey(_args):
@@ -749,6 +991,8 @@ def main():
     sub.add_parser("base")
     sub.add_parser("rekey")
     sub.add_parser("audit")  # 품질 감사(고스트/커버리지/위치)
+    p_ap = sub.add_parser("accplace")  # 착용샷에서 액세서리 분리→규칙 배치
+    p_ap.add_argument("code")
     sub.add_parser("promote")  # v2: public 승격(정렬 크롭)
     p_rf = sub.add_parser("refine")  # 보관 시트에서 overlay 재추출(깨짐 보정)
     p_rf.add_argument("code", nargs="?", default=None)
@@ -770,7 +1014,7 @@ def main():
 
     {
         "check": cmd_check, "base": cmd_base, "item": cmd_item, "all": cmd_all, "rekey": cmd_rekey,
-        "bases": cmd_bases, "overlay": cmd_overlay, "compose": cmd_compose, "promote": cmd_promote, "gamecard": cmd_gamecard, "refine": cmd_refine, "audit": cmd_audit,
+        "bases": cmd_bases, "overlay": cmd_overlay, "compose": cmd_compose, "promote": cmd_promote, "gamecard": cmd_gamecard, "refine": cmd_refine, "audit": cmd_audit, "accplace": cmd_accplace,
     }[args.cmd](args)
 
 

@@ -7,6 +7,6 @@ INSERT INTO bgm_track (key, title, descr, file, sort) VALUES
   ('quiz',       'Golden Ticket Shuffle',   '⚡ 퀴즈게임 방 — 경쾌한 두뇌 대결',             'quiz_bgm.mp3',        5),
   ('mafiaDay',   'The Third Alibi',         '☀️ 마피아 · 낮 — 누가 거짓말을 하는가',         'mafia_day_bgm.mp3',   6),
   ('mafiaNight', 'Measured Breath',         '🌙 마피아 · 밤 — 숨죽인 긴장의 시간',           'mafia_night_bgm.mp3', 7),
-  ('bang',       'The Sun Stares Back',     '🔫 Bang (출시 예정) — 미리 듣는 테마곡',        'bang_bgm.mp3',        8)
+  ('bang',       'Seven Seconds to Draw',   '🔫 Bang (출시 예정) — 미리 듣는 테마곡',        'bang_bgm.mp3',        8)
 ON CONFLICT (key) DO UPDATE
   SET title = EXCLUDED.title, descr = EXCLUDED.descr, file = EXCLUDED.file, sort = EXCLUDED.sort;

@@ -9,7 +9,7 @@ export interface AvatarInfo {
   [k: string]: unknown;
 }
 
-export const OVERLAY_ITEMS = new Set(['top_hoodie', 'hair_long', 'acc_crown', 'acc_sunglasses']);
+export const OVERLAY_ITEMS = new Set(['top_hoodie', 'hair_long', 'top_suit', 'top_stripe', 'acc_crown', 'acc_sunglasses', 'acc_cap']);
 
 // base 캐릭터 이름 (페르소나 원본: tools/assetgen/personas.json — 변경 시 동기화)
 export const BASE_NAMES: Record<string, string[]> = {
