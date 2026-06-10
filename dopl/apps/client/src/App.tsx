@@ -5,7 +5,7 @@ import { connectGame } from './socket';
 import * as api from './api';
 import PhaserLogin from './ui/PhaserLogin';
 import PhaserLobby from './ui/PhaserLobby';
-import Room from './ui/Room';
+import PhaserRoom from './ui/PhaserRoom';
 
 export default function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('dopl-token'));
@@ -46,7 +46,7 @@ export default function App() {
   if (!profile || !socket) return <main className="app"><p className="muted">로딩 중…</p></main>;
   if (room) {
     return (
-      <Room
+      <PhaserRoom
         socket={socket}
         room={room}
         games={games}

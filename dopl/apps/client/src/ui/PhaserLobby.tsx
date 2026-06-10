@@ -6,7 +6,9 @@ import { LobbyScene } from '../scenes/LobbyScene';
 
 export default function PhaserLobby({ socket, games, profile }: { socket: Socket; games: any[]; profile: any }) {
   const ref = useRef<HTMLDivElement>(null);
+  const gameRef = useRef<Phaser.Game | null>(null);
 
+  // 게임은 소켓 세션당 한 번만 생성/파괴. games/profile 변화로 재생성하지 않는다.
   useEffect(() => {
     if (!ref.current) return;
     const game = new Phaser.Game({
@@ -22,8 +24,16 @@ export default function PhaserLobby({ socket, games, profile }: { socket: Socket
     game.registry.set('socket', socket);
     game.registry.set('games', games);
     game.registry.set('profile', profile);
-    return () => game.destroy(true);
-  }, [socket, games, profile]);
+    gameRef.current = game;
+    return () => { game.destroy(true); gameRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket]);
+
+  // games/profile 갱신은 실행 중인 게임 registry에 주입 → LobbyScene이 구독해 re-render.
+  useEffect(() => {
+    gameRef.current?.registry.set('games', games);
+    gameRef.current?.registry.set('profile', profile);
+  }, [games, profile]);
 
   return <div ref={ref} className="phaser-fullscreen" />;
 }

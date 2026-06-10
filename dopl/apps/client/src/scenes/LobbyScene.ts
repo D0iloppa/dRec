@@ -33,7 +33,21 @@ export class LobbyScene extends Phaser.Scene {
 
     const onLobby = (d: LobbyData) => { this.lobbyData = d; this.render(); };
     this.socket.on('lobby', onLobby);
-    this.events.once('shutdown', () => this.socket.off('lobby', onLobby));
+
+    // games/profile은 PhaserLobby가 registry로 주입 → 게임 재생성 없이 갱신.
+    const onReg = () => {
+      this.games = this.game.registry.get('games') ?? [];
+      this.profile = this.game.registry.get('profile');
+      this.render();
+    };
+    this.game.registry.events.on('changedata-games', onReg);
+    this.game.registry.events.on('changedata-profile', onReg);
+
+    this.events.once('shutdown', () => {
+      this.socket.off('lobby', onLobby);
+      this.game.registry.events.off('changedata-games', onReg);
+      this.game.registry.events.off('changedata-profile', onReg);
+    });
     this.socket.emit('lobbyRefresh');
     this.render();
   }

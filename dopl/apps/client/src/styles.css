@@ -107,7 +107,9 @@ button.mini { padding: .15rem .5rem; font-size: .75rem; margin-left: .5rem; }
 
 /* ===== Phaser 풀스크린 호스트 + DOM 폼 ===== */
 .phaser-fullscreen { width: 100vw; height: 100vh; overflow: hidden; }
-.auth-dom { width: 340px; }
+.auth-dom { width: 340px; max-height: 96vh; overflow-y: auto; text-align: center; padding: 4px; }
+.auth-dom .logo3d { font-size: 3.6rem; margin-bottom: 0; }
+.auth-dom .logo-sub { margin: .1rem 0 1rem; }
 .auth-dom .auth-error { margin: 0 0 .7rem; }
 
 /* 회원가입 카드 */
@@ -167,3 +169,38 @@ button.mini { padding: .15rem .5rem; font-size: .75rem; margin-left: .5rem; }
 .btn-primary { flex: 1; background: linear-gradient(#34c759,#1e9e44); color: #fff; border: none; border-radius: 8px; padding: .6rem; font-weight: 800; cursor: pointer; }
 .profile-modal .prof-ava { width: 90px; height: 110px; margin: 0 auto .5rem; background: rgba(255,255,255,.1); border-radius: 10px; }
 .prof-iq { color: #7dff9b; font-weight: 800; margin-bottom: 1rem; }
+
+/* ===== Phaser 게임방 (로비와 동일 톤) ===== */
+.room { width: 94vw; max-width: 980px; height: 90vh; max-height: 660px; display: flex; flex-direction: column;
+  background: linear-gradient(#0e4a72, #0b3a5b); border: 2px solid #2fb6e6; border-radius: 14px;
+  box-shadow: 0 0 0 4px rgba(47,182,230,.15), 0 12px 30px rgba(0,0,0,.4); color: #e6f6ff; overflow: hidden; font-size: 14px; }
+.room-top { display: flex; justify-content: space-between; align-items: center; padding: .6rem 1rem; background: rgba(47,182,230,.18); border-bottom: 1px solid #2fb6e6; }
+.room-head { font-weight: 800; }
+.room-head b { color: #ffd400; }
+.room-phase { color: #9fd8f5; font-weight: 700; }
+.room-phase .timer { color: #ffd400; }
+.room-err { margin: .5rem .75rem 0; padding: .5rem .7rem; background: rgba(220,38,38,.2); border: 1px solid #dc2626; border-radius: 8px; color: #fecaca; }
+.room-body { flex: 1; display: flex; gap: .75rem; padding: .75rem; min-height: 0; }
+.room-main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow-y: auto; }
+.room-card { background: rgba(255,255,255,.06); border: 1px solid #2a7aa6; border-radius: 10px; padding: 1rem; }
+.room-card h3 { margin: 0 0 .6rem; color: #9fd8f5; }
+.room-main .players { list-style: none; padding: 0; margin: 0; }
+.room-main .players li { padding: .4rem 0; border-bottom: 1px solid rgba(47,182,230,.2); }
+.room-main .players li.off { opacity: .45; }
+.room-start-btn { margin-top: .8rem; width: 100%; padding: .7rem; border: none; border-radius: 10px; background: linear-gradient(#34c759,#1e9e44); color: #fff; font-weight: 900; font-size: 1rem; cursor: pointer; box-shadow: 0 3px 0 #1c8a38; }
+.game-pane { display: flex; flex-direction: column; gap: .6rem; align-items: center; }
+.game-mount { width: 560px; max-width: 100%; aspect-ratio: 4 / 3; border-radius: 10px; overflow: hidden; border: 1px solid #2a7aa6; }
+.game-mount canvas { display: block; width: 100% !important; height: 100% !important; }
+.game-log { width: 100%; max-width: 560px; background: rgba(0,0,0,.18); border: 1px solid #2a7aa6; border-radius: 10px; padding: .5rem .7rem; }
+.game-log h4 { margin: .1rem 0 .4rem; color: #9fd8f5; }
+.logline { font-size: .85rem; padding: .1rem 0; color: #cdeeff; }
+.room-side { width: 250px; flex-shrink: 0; background: rgba(0,0,0,.18); border: 1px solid #2a7aa6; border-radius: 10px; padding: .5rem; display: flex; flex-direction: column; }
+.room-side h4 { margin: .2rem .2rem .5rem; color: #9fd8f5; }
+.room-side .chatlog { flex: 1; overflow-y: auto; margin-bottom: .5rem; }
+.room-side .chatline { font-size: .85rem; padding: .12rem 0; }
+.room-side .chatform { display: flex; gap: .4rem; }
+.room-side .chatform input { flex: 1; padding: .45rem; border-radius: 8px; border: 1px solid #2a7aa6; background: #0b3a5b; color: #e6f6ff; }
+.room-side .chatform button { background: linear-gradient(#34c759,#1e9e44); color: #fff; border: none; border-radius: 8px; padding: 0 .8rem; font-weight: 800; cursor: pointer; }
+.room-leave { margin: 0 .75rem .75rem; padding: .55rem; border: none; border-radius: 10px; background: rgba(255,255,255,.12); color: #cdeeff; font-weight: 700; cursor: pointer; }
+.room-leave:hover { background: rgba(255,255,255,.2); }
+.room .muted { color: #9fd8f5; }

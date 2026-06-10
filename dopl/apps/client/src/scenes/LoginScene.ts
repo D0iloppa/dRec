@@ -6,8 +6,6 @@ type Mode = 'login' | 'signup';
 
 export class LoginScene extends Phaser.Scene {
   private dom!: Phaser.GameObjects.DOMElement;
-  private logo!: Phaser.GameObjects.Text;
-  private sub!: Phaser.GameObjects.Text;
   private mode: Mode = 'login';
 
   constructor() {
@@ -18,18 +16,8 @@ export class LoginScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#7ec8ff');
     this.buildClouds();
 
-    const W = this.scale.width;
-    this.logo = this.add
-      .text(W / 2, 96, 'DOPL', { fontFamily: 'system-ui, sans-serif', fontSize: '78px', fontStyle: 'bold', color: '#ffd400' })
-      .setOrigin(0.5)
-      .setStroke('#e8730a', 9)
-      .setShadow(0, 6, 'rgba(0,0,0,0.3)', 6, true, true);
-    this.sub = this.add
-      .text(W / 2, 150, 'doil playground', { fontFamily: 'system-ui, sans-serif', fontSize: '18px', fontStyle: 'bold', color: '#0b6cb0' })
-      .setOrigin(0.5);
-    this.tweens.add({ targets: this.logo, y: 88, yoyo: true, repeat: -1, duration: 1500, ease: 'Sine.easeInOut' });
-
-    this.dom = this.add.dom(W / 2, this.scale.height * 0.52).createFromHTML('<div class="auth-dom"></div>');
+    // 로고+폼을 하나의 DOM 컬럼으로 묶어 화면 중앙에 배치(넘치면 스크롤).
+    this.dom = this.add.dom(this.scale.width / 2, this.scale.height / 2).createFromHTML('<div class="auth-dom"></div>');
     this.render();
 
     this.scale.on('resize', this.reposition, this);
@@ -53,10 +41,7 @@ export class LoginScene extends Phaser.Scene {
   }
 
   private reposition() {
-    const W = this.scale.width;
-    this.logo.setX(W / 2);
-    this.sub.setX(W / 2);
-    this.dom.setPosition(W / 2, this.scale.height * 0.52);
+    this.dom.setPosition(this.scale.width / 2, this.scale.height / 2);
   }
 
   private oauthHTML() {
@@ -91,7 +76,13 @@ export class LoginScene extends Phaser.Scene {
            ${this.oauthHTML()}
            <div class="auth-links">이미 계정이 있으신가요? <span id="toLogin">로그인</span></div>`;
 
-    (this.dom.node as HTMLElement).innerHTML = `<div class="auth-dom"><div id="err" class="auth-error" style="display:none"></div>${form}</div>`;
+    (this.dom.node as HTMLElement).innerHTML = `<div class="auth-dom">
+        <div class="logo3d">DOPL</div>
+        <div class="logo-sub">doil&nbsp;playground</div>
+        <div id="err" class="auth-error" style="display:none"></div>${form}</div>`;
+    // innerHTML 변경 후 크기 재계산 → origin(0.5) 기준 수직 중앙정렬
+    this.dom.updateSize();
+    this.dom.setPosition(this.scale.width / 2, this.scale.height / 2);
     this.wire();
   }
 
