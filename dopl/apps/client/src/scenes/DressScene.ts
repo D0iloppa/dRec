@@ -19,7 +19,8 @@ export class DressScene extends Phaser.Scene {
   private items: ShopItem[] = [];
   private owned = new Set<string>();
   private draft: Equipped = {};
-  private base = 1; // 캐릭터 base 변형 (1~3)
+  private base = 1; // 미리보기 중인 base (성형 전엔 적용 불가)
+  private myBase = 1; // 실제 내 base
   private tab = 'hair';
   private msg = '';
   private token = '';
@@ -53,7 +54,8 @@ export class DressScene extends Phaser.Scene {
         const saved = this.profile?.profile?.avatar?.equipped ?? {};
         // 비활성(애셋 미준비) 아이템은 draft에서 제외
         this.draft = Object.fromEntries(Object.entries(saved).filter(([, c]) => this.items.some((i) => i.code === c))) as Equipped;
-        this.base = this.profile?.profile?.avatar?.base ?? 1;
+        this.myBase = this.profile?.profile?.avatar?.base ?? 1;
+        this.base = this.myBase;
         this.render();
       } catch (e) {
         this.msg = (e as Error).message;
@@ -121,7 +123,10 @@ export class DressScene extends Phaser.Scene {
           <div class="dx-right">
             <div class="base-pick">
               <span class="base-pick-label">캐릭터</span>
-              ${[1, 2, 3].map((n) => `<div class="base-opt ${this.base === n ? 'sel' : ''}" data-base="${n}"><img src="/avatar/${g}/b${n}/base.png" alt="base${n}" draggable="false"><span class="base-name">${BASE_NAMES[g]?.[n - 1] ?? ''}</span></div>`).join('')}
+              ${[1, 2, 3].map((n) => `<div class="base-opt ${this.base === n ? 'sel' : ''} ${this.myBase === n ? 'mine' : ''}" data-base="${n}"><img src="/avatar/${g}/b${n}/base.png" alt="base${n}" draggable="false"><span class="base-name">${BASE_NAMES[g]?.[n - 1] ?? ''}${this.myBase === n ? ' ✔' : ''}</span></div>`).join('')}
+              ${this.base !== this.myBase
+                ? `<button id="surgeryBtn" class="lb-btn lb-btn-red surgery-btn">✨ 성형하기<br><small>🪙 100,000</small></button>`
+                : '<span class="shop-hint surgery-hint">다른 캐릭터는 [성형]으로만 변경돼요</span>'}
             </div>
             <div class="dx-tabs">${tabs}</div>
             <div class="dx-grid">${cards || '<div class="lb-empty">보유한 아이템이 없어요. 상점에서 구매해 보세요!</div>'}</div>
@@ -157,13 +162,26 @@ export class DressScene extends Phaser.Scene {
     n.querySelectorAll('.base-opt').forEach((el) =>
       el.addEventListener('click', () => { this.base = Number((el as HTMLElement).dataset.base); this.render(); })
     );
+    n.querySelector('#surgeryBtn')?.addEventListener('click', () => {
+      const name = BASE_NAMES[this.gender()]?.[this.base - 1] ?? '';
+      if (!window.confirm(`정말 "${name}"(으)로 성형할까요?\n비용: 🪙 100,000 (환불 불가)`)) return;
+      api.surgery(this.token, this.base)
+        .then(() => {
+          this.myBase = this.base;
+          this.msg = `✨ 성형 완료! 이제 ${name}의 모습이에요.`;
+          (this.game.registry.get('socket') as { emit: (e: string) => void } | undefined)?.emit?.('profileRefresh');
+          this.refreshProfile();
+          this.render();
+        })
+        .catch((e) => { this.msg = e.message; this.render(); });
+    });
     n.querySelector('#dressSave')?.addEventListener('click', () => void this.save());
     n.querySelector('#nickSave')?.addEventListener('click', () => void this.saveNick());
   }
 
   private async save() {
     try {
-      await api.equipAvatar(this.token, this.draft, this.base);
+      await api.equipAvatar(this.token, this.draft);
       (this.game.registry.get('socket') as { emit: (e: string) => void } | undefined)?.emit?.('profileRefresh');
       this.refreshProfile();
       this.msg = '저장되었습니다!';

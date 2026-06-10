@@ -33,4 +33,4 @@ INSERT INTO item (code, name, slot, asset, price, rarity) VALUES
 ON CONFLICT (code) DO NOTHING;
 
 -- v2(레이어 애셋) 전환: overlay 애셋이 준비된 아이템만 노출
-UPDATE item SET enabled = (code IN ('top_hoodie','hair_long','acc_crown','acc_sunglasses','top_suit','top_stripe','acc_cap'));
+UPDATE item SET enabled = (code IN ('top_hoodie','hair_long','hair_spiky','hair_pony','top_suit','top_stripe','acc_crown','acc_sunglasses','acc_cap'));

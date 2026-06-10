@@ -570,3 +570,9 @@ button.mini { padding: .15rem .5rem; font-size: .75rem; margin-left: .5rem; }
   box-shadow: 0 3px 0 #b97a08; }
 .juke-thumb { width: 38px; height: 38px; border-radius: 8px; object-fit: cover; image-rendering: pixelated; cursor: pointer; flex-shrink: 0; }
 .juke-panel { max-width: 600px; }
+
+/* 성형 */
+.base-opt.mine { border-color: #1d7fc4; }
+.surgery-btn { padding: .35rem .8rem; line-height: 1.25; font-size: .85rem; }
+.surgery-btn small { font-weight: 700; }
+.surgery-hint { align-self: center; font-size: .74rem; }

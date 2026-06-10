@@ -569,6 +569,42 @@ def cmd_compose(args):
     print(f"  → {out.relative_to(OUT_ROOT.parent)}")
 
 
+
+# 오버레이 기본 keep 영역 — base 콘텐츠 bbox 상대좌표 (x0,y0,x1,y1). 영역 밖 픽셀(얼굴 잔상 등) 제거.
+# 애셋별 미세 조정은 crops.json["crop"]["<g>/b<i>/<name>"] = [x0,y0,x1,y1] (strip 절대좌표)로 오버라이드.
+SLOT_REGIONS = {
+    "acc_glasses": (-0.05, 0.08, 1.05, 0.45),
+    "acc_sunglasses": (-0.05, 0.08, 1.05, 0.45),
+    "acc_crown": (-0.15, -0.50, 1.15, 0.35),
+    "acc_cap": (-0.15, -0.50, 1.15, 0.40),
+    "acc_ribbon": (-0.20, -0.50, 1.20, 0.45),
+    "acc_headphone": (-0.20, -0.40, 1.20, 0.55),
+    "acc_halo": (-0.20, -0.60, 1.20, 0.20),
+    "hair_spiky": (-0.15, -0.45, 1.15, 0.30),
+    "hair_pony": (-0.30, -0.40, 1.30, 0.60),
+    "hair_long": (-0.30, -0.40, 1.30, 1.00),
+    "top_hoodie": (-0.25, 0.42, 1.25, 2.5),
+    "top_suit": (-0.25, 0.42, 1.25, 2.5),
+    "top_stripe": (-0.25, 0.42, 1.25, 2.5),
+}
+
+
+def load_crops() -> dict:
+    p = HERE / "crops.json"
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {"scale": {}, "crop": {}}
+
+
+def apply_keep_box(img, box):
+    """keep 박스 밖 픽셀 제거 (절대좌표)."""
+    x0, y0, x1, y1 = box
+    px = img.load()
+    W, H = img.size
+    for y in range(H):
+        for x in range(W):
+            if not (x0 <= x < x1 and y0 <= y < y1):
+                px[x, y] = (0, 0, 0, 0)
+
+
 def cmd_promote(args):
     """v2 산출물을 client public으로 승격 — 아바타 표준 규격으로 정규화.
     표준(작은 아바타 룩 = 남 b1/b3 기준): 캔버스 320x480, 머리폭(헤어 포함 상단 최대폭) 195px,
@@ -577,6 +613,7 @@ def cmd_promote(args):
     STD_W, STD_H = 320, 480
     STD_HEAD_W = 195
     TOP_Y = 88
+    crops = load_crops()
     pub_root = HERE.parent.parent / "apps" / "client" / "public" / "avatar"
     for g in args.genders:
         gdir = V2_ROOT / g
@@ -613,8 +650,20 @@ def cmd_promote(args):
                 continue
             y0, y1, x0, x1 = min(ys), max(ys) + 1, min(xs), max(xs) + 1
             ch = y1 - y0
+            cw = x1 - x0
             head_w = max(rows[y] for y in range(y0 + int(ch * 0.08), y0 + int(ch * 0.30)))
-            s = STD_HEAD_W / head_w
+            # 수동 배율(crops.json — 태오 m/b2 기준) 우선, 없으면 머리폭 자동
+            s = crops.get("scale", {}).get(f"{g}/b{i}") or (STD_HEAD_W / head_w)
+            # 오버레이 keep 박스 적용 — 수동(crop) > 슬롯 기본(SLOT_REGIONS)
+            for name, img in imgs.items():
+                if name == "base":
+                    continue
+                manual = crops.get("crop", {}).get(f"{g}/b{i}/{name}")
+                if manual:
+                    apply_keep_box(img, manual)
+                elif name in SLOT_REGIONS:
+                    rx0, ry0, rx1, ry1 = SLOT_REGIONS[name]
+                    apply_keep_box(img, (x0 + rx0 * cw, y0 + ry0 * ch, x0 + rx1 * cw, y0 + ry1 * ch))
             cx = ((x0 + x1) / 2) * s
             ox = round(STD_W / 2 - cx)
             oy = round(TOP_Y - y0 * s)
@@ -625,7 +674,7 @@ def cmd_promote(args):
                 canvas = Image.new("RGBA", (STD_W, STD_H), (0, 0, 0, 0))
                 canvas.paste(scaled, (ox, oy), scaled)
                 canvas.save(out_dir / f"{name}.png")
-            print(f"  → public/avatar/{g}/b{i}/ ({len(imgs)}개, head_w {head_w}→{STD_HEAD_W} scale={s:.2f})")
+            print(f"  → public/avatar/{g}/b{i}/ ({len(imgs)}개, scale={s:.2f})")
 
 
 # 게임 카탈로그 키비주얼 (방 만들기 카드용) — 캐릭터 톤과 같은 레트로 도트 일러스트

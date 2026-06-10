@@ -97,6 +97,45 @@ profileRouter.patch('/me', requireAuth, async (req: AuthedRequest, res) => {
   }
 });
 
+
+// 성형 — base(캐릭터 외형) 변경. 분장실에서 자유 변경 불가, 오직 이 API(비용 100,000코인)로만.
+const SURGERY_COST = 100000;
+profileRouter.post('/surgery', requireAuth, async (req: AuthedRequest, res) => {
+  const uid = req.user!.uid;
+  const baseN = Number(req.body?.base);
+  if (!Number.isInteger(baseN) || baseN < 1 || baseN > 3) {
+    res.status(400).json({ error: 'base는 1~3이어야 합니다.' });
+    return;
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: prof } = await client.query('SELECT avatar FROM user_profile WHERE user_id = $1 FOR UPDATE', [uid]);
+    if (!prof[0]) { await client.query('ROLLBACK'); res.status(404).json({ error: '프로필이 없습니다.' }); return; }
+    const cur = prof[0].avatar?.base ?? 1;
+    if (cur === baseN) { await client.query('ROLLBACK'); res.status(400).json({ error: '이미 그 모습입니다.' }); return; }
+    const { rows: w } = await client.query('SELECT coins FROM user_wallet WHERE user_id = $1 FOR UPDATE', [uid]);
+    if ((w[0]?.coins ?? 0) < SURGERY_COST) {
+      await client.query('ROLLBACK');
+      res.status(402).json({ error: `성형 비용이 부족합니다. (🪙 ${SURGERY_COST.toLocaleString()})` });
+      return;
+    }
+    await client.query('UPDATE user_wallet SET coins = coins - $2, updated_at = now() WHERE user_id = $1', [uid, SURGERY_COST]);
+    await client.query(
+      `UPDATE user_profile SET avatar = jsonb_set(coalesce(avatar, '{}'::jsonb), '{base}', to_jsonb($2::int)), updated_at = now() WHERE user_id = $1`,
+      [uid, baseN]
+    );
+    await client.query('COMMIT');
+    res.json({ ok: true, base: baseN, cost: SURGERY_COST });
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[profile/surgery]', e);
+    res.status(500).json({ error: '성형 처리 오류' });
+  } finally {
+    client.release();
+  }
+});
+
 // 아바타 장착: { equipped: { slot: code }, base?: 1~3 }. 무료(price 0) 또는 보유 아이템만 허용.
 profileRouter.put('/equip', requireAuth, async (req: AuthedRequest, res) => {
   const equipped = req.body?.equipped;
@@ -104,12 +143,8 @@ profileRouter.put('/equip', requireAuth, async (req: AuthedRequest, res) => {
     res.status(400).json({ error: 'equipped 맵이 필요합니다.' });
     return;
   }
-  const baseRaw = req.body?.base;
-  const baseN = baseRaw === undefined || baseRaw === null ? null : Number(baseRaw);
-  if (baseN !== null && (!Number.isInteger(baseN) || baseN < 1 || baseN > 3)) {
-    res.status(400).json({ error: 'base는 1~3이어야 합니다.' });
-    return;
-  }
+  // base 변경은 성형(/surgery) 전용 — equip으로는 불가
+  const baseN: number | null = null;
   const entries = Object.entries(equipped).filter(([, v]) => typeof v === 'string') as [string, string][];
   const codes = entries.map(([, code]) => code);
   try {

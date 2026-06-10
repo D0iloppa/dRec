@@ -35,5 +35,7 @@ export const friendDecline = (token: string, nickname: string) =>
   req('/friends/decline', { method: 'POST', headers: { authorization: 'Bearer ' + token }, body: JSON.stringify({ nickname }) });
 export const friendRemove = (token: string, nickname: string) =>
   req('/friends/' + encodeURIComponent(nickname), { method: 'DELETE', headers: { authorization: 'Bearer ' + token } });
+export const surgery = (token: string, base: number) =>
+  req('/profile/surgery', { method: 'POST', headers: { authorization: 'Bearer ' + token }, body: JSON.stringify({ base }) });
 export const equipAvatar = (token: string, equipped: Record<string, string>, base?: number) =>
   req('/profile/equip', { method: 'PUT', headers: { authorization: 'Bearer ' + token }, body: JSON.stringify({ equipped, base }) });
