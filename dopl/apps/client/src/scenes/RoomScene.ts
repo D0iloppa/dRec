@@ -3,8 +3,11 @@
 // 상태는 PhaserRoom이 registry로 주입('room') → 게임 재생성 없이 갱신.
 import Phaser from 'phaser';
 import type { RoomState } from '@dopl/protocol';
+import { addCartoonBackdrop } from '../backdrop';
+import { avatarSvg } from '../avatar';
 import { OxScene } from '../games/ox/OxScene';
 import { CommonQuizScene } from '../games/common-quiz/CommonQuizScene';
+import { SpeedQuizScene } from '../games/speed-quiz/SpeedQuizScene';
 
 interface DoplGameScene extends Phaser.Scene {
   sendAction: (a: unknown) => void;
@@ -13,6 +16,7 @@ interface DoplGameScene extends Phaser.Scene {
 const GAME_SCENES: Record<string, new () => DoplGameScene> = {
   'ox-quiz': OxScene as unknown as new () => DoplGameScene,
   'common-quiz': CommonQuizScene as unknown as new () => DoplGameScene,
+  'speed-quiz': SpeedQuizScene as unknown as new () => DoplGameScene,
 };
 
 const PHASE_LABEL: Record<string, string> = { lobby: '대기실', playing: '진행 중', ended: '종료' };
@@ -34,7 +38,7 @@ export class RoomScene extends Phaser.Scene {
   }
 
   create() {
-    this.cameras.main.setBackgroundColor('#0b3a5b');
+    addCartoonBackdrop(this);
     this.socket = this.game.registry.get('socket');
     this.state = this.game.registry.get('room');
     this.games = this.game.registry.get('games') ?? [];
@@ -131,8 +135,11 @@ export class RoomScene extends Phaser.Scene {
     if (s.phase === 'lobby') {
       if (this.inGameRendered) { this.teardownGame(); this.inGameRendered = false; }
       this.renderWaiting(main, meta);
-    } else {
+    } else if (s.phase === 'playing') {
       this.renderInGame(main, s);
+    } else {
+      if (this.inGameRendered) { this.teardownGame(); this.inGameRendered = false; }
+      this.renderEnded(main, s);
     }
 
     // 채팅 로그 (입력/폼은 건드리지 않음)
@@ -144,16 +151,23 @@ export class RoomScene extends Phaser.Scene {
     this.dom.setPosition(this.scale.width / 2, this.scale.height / 2);
   }
 
+  // 대기실 — 참가자 아바타 카드 그리드 (큐플레이식 대기 화면)
   private renderWaiting(main: HTMLElement, meta?: { minPlayers: number }) {
     const s = this.state;
     const isHost = s.hostId === s.myId;
     const players = s.players
-      .map((p) => `<li class="${p.connected ? '' : 'off'}">${this.esc(p.name)} ${p.isHost ? '👑' : ''}</li>`)
+      .map(
+        (p) => `
+        <div class="wait-seat ${p.connected ? '' : 'off'}">
+          <div class="wait-ava">${avatarSvg(((p as any).avatar?.equipped as Record<string, string>) ?? {})}</div>
+          <div class="wait-name">${p.isHost ? '👑 ' : ''}${this.esc(p.name)}${p.id === s.myId ? ' (나)' : ''}</div>
+        </div>`
+      )
       .join('');
     main.innerHTML = `
       <div class="room-card">
         <h3>참가자 (${s.players.length})</h3>
-        <ul class="players">${players}</ul>
+        <div class="wait-grid">${players}</div>
         ${isHost
           ? `<button id="rStart" class="room-start-btn">게임 시작 (${meta?.minPlayers ?? 2}명 이상)</button>`
           : `<p class="muted">호스트가 시작하기를 기다리는 중…</p>`}
@@ -176,6 +190,39 @@ export class RoomScene extends Phaser.Scene {
     if (logList) {
       logList.innerHTML = (((s.game as any).log as string[]) || []).map((l) => `<div class="logline">${this.esc(l)}</div>`).join('');
     }
+  }
+
+  // 종료 — 결과 랭킹 보드. 호스트는 '다시 하기'로 대기실 복귀(restart).
+  private renderEnded(main: HTMLElement, s: RoomState) {
+    const g = s.game as any;
+    const board: { name: string; score?: number; iqDelta: number; coinsDelta: number; won: boolean }[] =
+      g.finalBoard ?? [];
+    const hasScore = board.some((r) => r.score != null);
+    const isHost = s.hostId === s.myId;
+    const rows = board
+      .map(
+        (r, i) => `
+        <tr class="${r.won ? 'win' : ''}">
+          <td>${i + 1}</td>
+          <td class="rname">${this.esc(r.name)}${r.won ? ' 🏆' : ''}</td>
+          ${hasScore ? `<td>${r.score ?? 0}</td>` : ''}
+          <td>${r.iqDelta >= 0 ? '+' : ''}${r.iqDelta}</td>
+          <td>${r.coinsDelta >= 0 ? '+' : ''}${r.coinsDelta}</td>
+        </tr>`
+      )
+      .join('');
+    main.innerHTML = `
+      <div class="room-card result-card">
+        <h3>🏁 게임 결과</h3>
+        <table class="result-table">
+          <thead><tr><th>#</th><th>플레이어</th>${hasScore ? '<th>점수</th>' : ''}<th>IQ</th><th>코인</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="5">결과 없음</td></tr>'}</tbody>
+        </table>
+        ${isHost
+          ? '<button id="rAgain" class="room-start-btn">다시 하기</button>'
+          : '<p class="muted">호스트가 다시 시작하기를 기다리는 중…</p>'}
+      </div>`;
+    main.querySelector('#rAgain')?.addEventListener('click', () => this.socket.emit('restart'));
   }
 
   private mountGame(type: string) {

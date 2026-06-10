@@ -4,7 +4,11 @@ import Phaser from 'phaser';
 import type { Socket } from 'socket.io-client';
 import { LobbyScene } from '../scenes/LobbyScene';
 
-export default function PhaserLobby({ socket, games, profile }: { socket: Socket; games: any[]; profile: any }) {
+export default function PhaserLobby({
+  socket, games, profile, token, onLogout, refreshProfile,
+}: {
+  socket: Socket; games: any[]; profile: any; token: string; onLogout: () => void; refreshProfile: () => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
 
@@ -24,6 +28,9 @@ export default function PhaserLobby({ socket, games, profile }: { socket: Socket
     game.registry.set('socket', socket);
     game.registry.set('games', games);
     game.registry.set('profile', profile);
+    game.registry.set('token', token);
+    game.registry.set('onLogout', onLogout);
+    game.registry.set('refreshProfile', refreshProfile);
     gameRef.current = game;
     return () => { game.destroy(true); gameRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps

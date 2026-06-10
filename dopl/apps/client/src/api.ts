@@ -18,3 +18,10 @@ export const getProfile = (token: string) =>
 export const patchProfile = (token: string, body: Record<string, unknown>) =>
   req('/profile/me', { method: 'PATCH', headers: { authorization: 'Bearer ' + token }, body: JSON.stringify(body) });
 export const getPresets = () => req('/profile/presets');
+export const getItems = () => req('/shop/items');
+export const getInventory = (token: string) =>
+  req('/shop/inventory', { headers: { authorization: 'Bearer ' + token } });
+export const buyItem = (token: string, itemId: number) =>
+  req('/shop/buy', { method: 'POST', headers: { authorization: 'Bearer ' + token }, body: JSON.stringify({ itemId }) });
+export const equipAvatar = (token: string, equipped: Record<string, string>) =>
+  req('/profile/equip', { method: 'PUT', headers: { authorization: 'Bearer ' + token }, body: JSON.stringify({ equipped }) });

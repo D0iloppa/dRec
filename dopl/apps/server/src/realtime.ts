@@ -3,13 +3,13 @@ import { Server, type Socket } from 'socket.io';
 import type { Server as HttpServer } from 'node:http';
 import { Room } from '@dopl/core';
 import { verifyToken, type JwtPayload } from './auth/jwt.js';
-import { registry, gameList, loadOxQuestions, loadMcQuestions } from './games.js';
+import { registry, gameList, loadOxQuestions, loadMcQuestions, loadTextQuestions } from './games.js';
 import { applyResults } from './economy.js';
 import { pool } from './db.js';
 
 async function loadProfile(userId: number) {
   const { rows } = await pool.query(
-    `SELECT p.nickname, p.iq, p.avatar, w.coins
+    `SELECT p.nickname, p.iq, p.xp, p.avatar, w.coins
        FROM user_profile p JOIN user_wallet w ON w.user_id = p.user_id
       WHERE p.user_id = $1`,
     [userId]
@@ -32,6 +32,8 @@ export function setupRealtime(http: HttpServer): Server {
 
   // 방에 들어가지 않고 로비에 있는 소켓들
   const lobby = new Set<Socket>();
+  // 로비 전체 채팅 (최근 100개 보관, payload엔 50개)
+  const lobbyChat: { name: string; text: string; ts: number }[] = [];
 
   // JWT 소켓 인증 (handshake.auth.token)
   nsp.use((socket, next) => {
@@ -43,11 +45,10 @@ export function setupRealtime(http: HttpServer): Server {
     }
   });
 
-  // 열린 방(대기실 phase) 요약 목록
+  // 방 요약 목록 — 대기중/게임중 모두 노출 (큐플레이식 목록)
   function roomSummaries() {
     const out: unknown[] = [];
     for (const r of rooms.values()) {
-      if (r.phase !== 'lobby') continue;
       const meta = registry[r.type]?.meta;
       out.push({
         code: r.code,
@@ -57,6 +58,7 @@ export function setupRealtime(http: HttpServer): Server {
         host: (r.hostId && r.player(r.hostId)?.name) || '',
         count: r.connected().length,
         max: meta?.maxPlayers ?? 0,
+        status: r.phase === 'lobby' ? 'waiting' : 'playing',
       });
     }
     return out;
@@ -65,9 +67,9 @@ export function setupRealtime(http: HttpServer): Server {
   function lobbyPayload() {
     const users = [...lobby].map((s) => {
       const p = s.data.profile ?? {};
-      return { nickname: p.nickname ?? p.username, iq: p.iq ?? null, avatar: p.avatar ?? null };
+      return { nickname: p.nickname ?? p.username, iq: p.iq ?? null, xp: p.xp ?? 0, avatar: p.avatar ?? null };
     });
-    return { rooms: roomSummaries(), users };
+    return { rooms: roomSummaries(), users, chat: lobbyChat.slice(-50) };
   }
   // 로비 상태를 로비 소켓들에 broadcast
   function broadcastLobby() {
@@ -111,6 +113,23 @@ export function setupRealtime(http: HttpServer): Server {
     // 씬 마운트 시 현재 로비 상태 요청
     socket.on('lobbyRefresh', () => { socket.emit('lobby', lobbyPayload()); });
 
+    // 로비 전체 채팅
+    socket.on('lobbyChat', (payload) => {
+      const text = String(payload?.text ?? '').trim().slice(0, 300);
+      if (!text || !lobby.has(socket)) return;
+      const p = socket.data.profile ?? {};
+      lobbyChat.push({ name: p.nickname ?? p.username ?? '익명', text, ts: Date.now() });
+      if (lobbyChat.length > 100) lobbyChat.shift();
+      broadcastLobby();
+    });
+
+    // 아바타/프로필 변경 후 재조회 → 로비 목록에 반영
+    socket.on('profileRefresh', async () => {
+      const p = await loadProfile(user.uid).catch(() => null);
+      socket.data.profile = { ...(p ?? {}), username: user.username };
+      broadcastLobby();
+    });
+
     const makeRoom = (type: string, title?: string): Room | null => {
       const pkg = registry[type];
       if (!pkg) return null;
@@ -123,15 +142,18 @@ export function setupRealtime(http: HttpServer): Server {
       r.onChange = () => void update(r);
       r.context.loadOxQuestions = () => loadOxQuestions(10);
       r.context.loadMcQuestions = () => loadMcQuestions(10);
+      r.context.loadTextQuestions = () => loadTextQuestions(10);
       r.game = pkg.createEngine(r);
       rooms.set(code, r);
       return r;
     };
 
+    const myAvatar = () => socket.data.profile?.avatar ?? null;
+
     socket.on('createRoom', (payload, cb) => {
       const r = makeRoom(payload?.type, payload?.title);
       if (!r) return cb?.({ ok: false, error: '알 수 없는 게임 타입' });
-      r.addPlayer(pid, payload?.name || user.username, socket.id, user.uid);
+      r.addPlayer(pid, payload?.name || user.username, socket.id, user.uid, myAvatar());
       room = r;
       enterRoom();
       cb?.({ ok: true, code: r.code });
@@ -141,7 +163,10 @@ export function setupRealtime(http: HttpServer): Server {
     socket.on('joinRoom', (payload, cb) => {
       const r = rooms.get(String(payload?.code ?? '').toUpperCase());
       if (!r) return cb?.({ ok: false, error: '방을 찾을 수 없습니다.' });
-      if (!r.addPlayer(pid, payload?.name || user.username, socket.id, user.uid))
+      const max = registry[r.type]?.meta.maxPlayers;
+      if (max && !r.player(pid) && r.list().length >= max)
+        return cb?.({ ok: false, error: '정원이 가득 찼습니다.' });
+      if (!r.addPlayer(pid, payload?.name || user.username, socket.id, user.uid, myAvatar()))
         return cb?.({ ok: false, error: '이미 시작된 게임입니다.' });
       room = r;
       enterRoom();
@@ -170,6 +195,17 @@ export function setupRealtime(http: HttpServer): Server {
       broadcastLobby();
     });
 
+    // 종료된 게임을 대기실로 되돌려 재경기 (호스트 전용). 엔진 재생성 + 적립 플래그 리셋.
+    socket.on('restart', () => {
+      if (!room || room.phase !== 'ended' || !room.isHost(pid)) return;
+      for (const p of room.list()) if (!p.connected) room.players.delete(p.playerId);
+      room.clearTimer();
+      room.phase = 'lobby';
+      (room as Room & { _paid?: boolean })._paid = false;
+      room.game = registry[room.type]!.createEngine(room);
+      void update(room);
+    });
+
     socket.on('start', async () => {
       if (!room) return;
       try {
@@ -192,7 +228,10 @@ export function setupRealtime(http: HttpServer): Server {
 
     socket.on('chat', (payload) => {
       if (!room) return;
-      room.addChat(pid, payload?.text);
+      const text = String(payload?.text ?? '');
+      // 진행 중이고 엔진이 채팅 훅을 구현하면 게임 입력으로 위임(스피드퀴즈 답안 등)
+      if (room.phase === 'playing' && room.game.onChat) room.game.onChat(pid, text);
+      else room.addChat(pid, text);
       void update(room);
     });
 

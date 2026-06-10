@@ -17,6 +17,10 @@ export abstract class GameEngine {
   abstract start(requesterId: string): void | Promise<void>;
   abstract onAction(playerId: string, action: GameAction): void | Promise<void>;
 
+  // 채팅을 게임 입력으로 가로채는 훅(스피드퀴즈 등). 구현 시 채팅 기록까지 엔진이 담당한다.
+  // 미구현(undefined)이면 서버가 일반 채팅으로 처리.
+  onChat?(playerId: string, text: string): void;
+
   playerView(_player: PlayerView, _viewerId: string): Record<string, unknown> {
     return {};
   }

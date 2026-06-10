@@ -9,6 +9,7 @@ export interface RoomPlayer {
   name: string;
   socketId: string;
   connected: boolean;
+  avatar: unknown; // 프로필 아바타(equipped 맵 등) — 클라 렌더용
   [key: string]: unknown; // 게임별 필드(alive, role, iq 등)
 }
 
@@ -46,16 +47,17 @@ export class Room {
     return this.hostId === playerId;
   }
 
-  addPlayer(playerId: string, name: string, socketId: string, userId: number | null): boolean {
+  addPlayer(playerId: string, name: string, socketId: string, userId: number | null, avatar: unknown = null): boolean {
     const existing = this.players.get(playerId);
     if (existing) {
       existing.socketId = socketId;
       existing.connected = true;
       if (name) existing.name = name;
+      if (avatar) existing.avatar = avatar;
       return true;
     }
     if (this.phase !== 'lobby') return false;
-    this.players.set(playerId, { playerId, userId, name: name || '익명', socketId, connected: true });
+    this.players.set(playerId, { playerId, userId, name: name || '익명', socketId, connected: true, avatar });
     if (!this.hostId) this.hostId = playerId;
     return true;
   }
@@ -115,6 +117,7 @@ export class Room {
       name: p.name,
       connected: p.connected,
       isHost: p.playerId === this.hostId,
+      avatar: p.avatar ?? null,
       ...this.game.playerView(p as never, viewerId),
     }));
     return {

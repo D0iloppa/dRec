@@ -42,6 +42,12 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
+  // 게임 종료 시 적립된 IQ/코인이 로비에 반영되도록 프로필 재조회
+  useEffect(() => {
+    if (room?.phase === 'ended' && token) api.getProfile(token).then(setProfile).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room?.phase]);
+
   if (!token) return <PhaserLogin onAuth={setToken} />;
   if (!profile || !socket) return <main className="app"><p className="muted">로딩 중…</p></main>;
   if (room) {
@@ -55,5 +61,14 @@ export default function App() {
       />
     );
   }
-  return <PhaserLobby socket={socket} games={games} profile={profile} />;
+  return (
+    <PhaserLobby
+      socket={socket}
+      games={games}
+      profile={profile}
+      token={token}
+      onLogout={logout}
+      refreshProfile={() => api.getProfile(token).then(setProfile).catch(() => {})}
+    />
+  );
 }

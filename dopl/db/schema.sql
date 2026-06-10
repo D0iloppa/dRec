@@ -9,14 +9,16 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 프로필: 닉네임 + 아바타(프리셋 JSON) + iq(레벨 대체). 계정당 1행.
+-- 프로필: 닉네임 + 아바타(프리셋 JSON) + iq(0~1000, 체감식 상승) + xp(레벨 산정용). 계정당 1행.
 CREATE TABLE IF NOT EXISTS user_profile (
   user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   nickname   TEXT NOT NULL,
   avatar     JSONB NOT NULL DEFAULT '{"color":"slate","face":"😀"}',
   iq         INTEGER NOT NULL DEFAULT 100,
+  xp         INTEGER NOT NULL DEFAULT 0,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS xp INTEGER NOT NULL DEFAULT 0;
 
 -- 지갑: 게임 내 재화(coins). 계정당 1행.
 CREATE TABLE IF NOT EXISTS user_wallet (
@@ -51,6 +53,43 @@ CREATE TABLE IF NOT EXISTS dev_config (
   value       TEXT NOT NULL DEFAULT '',
   description TEXT,
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- OX퀴즈 콘텐츠. answer=true(O)/false(X).
+CREATE TABLE IF NOT EXISTS quiz_question (
+  id         SERIAL PRIMARY KEY,
+  category   TEXT,
+  question   TEXT NOT NULL UNIQUE,
+  answer     BOOLEAN NOT NULL,
+  difficulty SMALLINT NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 스피드퀴즈(주관식) 콘텐츠. answers=허용 정답 JSON 배열(첫 항목이 대표 정답).
+CREATE TABLE IF NOT EXISTS quiz_text_question (
+  id         SERIAL PRIMARY KEY,
+  category   TEXT,
+  question   TEXT NOT NULL UNIQUE,
+  answers    JSONB NOT NULL,
+  difficulty SMALLINT NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 꼬들(한글 워들) 데일리 단어 풀. 2음절·자모 6개 단어만 (시드에서 보장).
+CREATE TABLE IF NOT EXISTS wordle_word (
+  id   SERIAL PRIMARY KEY,
+  word TEXT UNIQUE NOT NULL
+);
+
+-- 미니게임 결과 (유저당 퍼즐 1회 기록 — 보상 중복 지급 방지).
+CREATE TABLE IF NOT EXISTS mini_result (
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  game       TEXT NOT NULL,
+  puzzle_no  INTEGER NOT NULL,
+  attempts   SMALLINT NOT NULL,
+  success    BOOLEAN NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, game, puzzle_no)
 );
 
 -- 상식퀴즈(4지선다) 콘텐츠. options=JSON 배열, answer_index=정답 인덱스(0~3).

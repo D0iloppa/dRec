@@ -15,7 +15,7 @@ profileRouter.get('/presets', (_req, res) => {
 profileRouter.get('/me', requireAuth, async (req: AuthedRequest, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT u.id, u.username, p.nickname, p.avatar, p.iq, w.coins
+      `SELECT u.id, u.username, p.nickname, p.avatar, p.iq, p.xp, w.coins
          FROM users u
          JOIN user_profile p ON p.user_id = u.id
          JOIN user_wallet  w ON w.user_id = u.id
@@ -29,7 +29,7 @@ profileRouter.get('/me', requireAuth, async (req: AuthedRequest, res) => {
     }
     res.json({
       user: { id: r.id, username: r.username },
-      profile: { nickname: r.nickname, avatar: r.avatar, iq: r.iq },
+      profile: { nickname: r.nickname, avatar: r.avatar, iq: r.iq, xp: r.xp },
       wallet: { coins: r.coins },
     });
   } catch (e) {

@@ -32,6 +32,7 @@ export class OxQuizEngine extends GameEngine {
   private log: string[] = [];
   private reveal: Reveal | null = null;
   private winnerNames: string[] = [];
+  private finalBoard: { name: string; iqDelta: number; coinsDelta: number; won: boolean }[] = [];
 
   constructor(private room: Room) {
     super();
@@ -128,6 +129,15 @@ export class OxQuizEngine extends GameEngine {
       p.coinsDelta = ((p.coinsDelta as number) ?? 0) + COIN_WIN;
     }
     this.winnerNames = survivors.map((p) => p.name);
+    this.finalBoard = this.room
+      .list()
+      .map((p) => ({
+        name: p.name,
+        iqDelta: (p.iqDelta as number) ?? 0,
+        coinsDelta: (p.coinsDelta as number) ?? 0,
+        won: p.alive !== false,
+      }))
+      .sort((a, b) => Number(b.won) - Number(a.won) || b.iqDelta - a.iqDelta);
     this.log.push(
       survivors.length ? `🏆 생존: ${this.winnerNames.join(', ')} (+${IQ_WIN} IQ, +${COIN_WIN} coins)` : '생존자 없음'
     );
@@ -166,7 +176,10 @@ export class OxQuizEngine extends GameEngine {
     };
     if (this.stage === 'answer' && q) v.question = { category: q.category, text: q.question };
     if (this.stage === 'reveal' || this.room.phase === 'ended') v.reveal = this.reveal;
-    if (this.room.phase === 'ended') v.winnerNames = this.winnerNames;
+    if (this.room.phase === 'ended') {
+      v.winnerNames = this.winnerNames;
+      v.finalBoard = this.finalBoard;
+    }
     return v;
   }
 
