@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 
+const DEV_API_BASE = 'https://www.doil.me/api/dev';
+
 const PROJECTS = [
   {
     key: 'saigon_rider',
     name: 'SaigonRider',
     url: 'https://saigon.doil.me',
-    summaryUrl: 'https://saigon.doil.me/api/bff/dev/summary',
+    summaryUrl: `${DEV_API_BASE}/summary/saigon_rider`,
     gitUrl: 'https://github.com/D0iloppa/saigon_rider',
     icon: '🏍️',
   },
@@ -13,7 +15,7 @@ const PROJECTS = [
     key: 'oh_no',
     name: 'oh!NO',
     url: 'https://ohno.doil.me',
-    summaryUrl: 'https://ohno.doil.me/api/dev/summary',
+    summaryUrl: `${DEV_API_BASE}/summary/oh_no`,
     gitUrl: 'https://github.com/D0iloppa/oh-no',
     icon: '📓',
   },
@@ -72,9 +74,13 @@ function ProjectCard({ project }) {
 
       {data && (
         <div className="dev-project-body">
-          {ctx.blocker?.value && ctx.blocker.value !== '없음' && (
-            <div className="dev-blocker">{ctx.blocker.status} {ctx.blocker.value}</div>
-          )}
+          {(() => {
+            const bv = ctx.blocker?.value;
+            const hasBlocker = bv && bv !== '없음' && bv !== 'none';
+            return hasBlocker
+              ? <div className="dev-blocker">{ctx.blocker.status} {bv}</div>
+              : <div className="dev-blocker dev-blocker-clear">✓ no blocker</div>;
+          })()}
           <div className="dev-ctx-row">
             <span className="dev-label">sprint</span>
             <span className="dev-value">{ctx.current_sprint?.status} {ctx.current_sprint?.value || '—'}</span>

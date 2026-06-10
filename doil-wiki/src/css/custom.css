@@ -157,6 +157,12 @@
   border-left: 2px solid #f85149;
 }
 
+.dev-blocker.dev-blocker-clear {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.06);
+  border-left-color: #34d399;
+}
+
 .dev-ctx-row {
   display: flex;
   gap: 8px;
