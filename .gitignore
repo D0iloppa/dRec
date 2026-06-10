@@ -51,3 +51,6 @@ openproject_pgdata/
 # Env files
 **/.env
 **/.env.local
+
+# CouchDB local.ini — 런타임에 admin 해시/uuid 가 기록됨 (비밀)
+couchdb/local.ini

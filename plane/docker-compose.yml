@@ -1,0 +1,187 @@
+x-app-env: &app-env
+  SECRET_KEY: "${PLANE_SECRET_KEY:?must be set}"
+  MACHINE_SIGNATURE: "${PLANE_MACHINE_SIGNATURE:?must be set}"
+  DATABASE_URL: "postgresql://plane:plane@plane-db:5432/plane"
+  REDIS_URL: "redis://plane-redis:6379/"
+  RABBITMQ_DEFAULT_USER: plane
+  RABBITMQ_DEFAULT_PASS: plane
+  AMQP_URL: "amqp://plane:plane@plane-mq:5672/"
+  WEB_URL: "https://plane.doil.me"
+  CORS_ALLOWED_ORIGINS: "https://plane.doil.me"
+  USE_MINIO: "1"
+  AWS_S3_ENDPOINT_URL: "http://plane-minio:9000"
+  AWS_S3_BUCKET_NAME: uploads
+  AWS_ACCESS_KEY_ID: plane
+  AWS_SECRET_ACCESS_KEY: planesecret
+  FILE_SIZE_LIMIT: "5242880"
+  GUNICORN_WORKERS: "2"
+
+services:
+  plane-web:
+    image: makeplane/plane-frontend:stable
+    container_name: plane-web
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+    networks:
+      plane-internal:
+        aliases:
+          - web
+      dev-net:
+
+  plane-admin:
+    image: makeplane/plane-admin:stable
+    container_name: plane-admin
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+    networks:
+      plane-internal:
+        aliases:
+          - admin
+
+  plane-space:
+    image: makeplane/plane-space:stable
+    container_name: plane-space
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+    networks:
+      plane-internal:
+        aliases:
+          - space
+
+  plane-api:
+    image: makeplane/plane-backend:stable
+    container_name: plane-api
+    restart: unless-stopped
+    command: /code/bin/docker-entrypoint-api.sh
+    environment:
+      <<: *app-env
+    depends_on:
+      - plane-db
+      - plane-redis
+      - plane-mq
+    networks:
+      plane-internal:
+        aliases:
+          - api
+      dev-net:
+
+  plane-worker:
+    image: makeplane/plane-backend:stable
+    container_name: plane-worker
+    restart: unless-stopped
+    command: /code/bin/docker-entrypoint-worker.sh
+    environment:
+      <<: *app-env
+    depends_on:
+      - plane-api
+    networks:
+      - plane-internal
+
+  plane-beat:
+    image: makeplane/plane-backend:stable
+    container_name: plane-beat
+    restart: unless-stopped
+    command: /code/bin/docker-entrypoint-beat.sh
+    environment:
+      <<: *app-env
+    depends_on:
+      - plane-api
+    networks:
+      - plane-internal
+
+  plane-migrator:
+    image: makeplane/plane-backend:stable
+    container_name: plane-migrator
+    command: /code/bin/docker-entrypoint-migrator.sh
+    environment:
+      <<: *app-env
+    depends_on:
+      - plane-db
+      - plane-redis
+    networks:
+      - plane-internal
+
+  plane-live:
+    image: makeplane/plane-live:stable
+    container_name: plane-live
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+    networks:
+      plane-internal:
+        aliases:
+          - live
+
+  plane-proxy:
+    image: makeplane/plane-proxy:stable
+    container_name: plane-proxy
+    restart: unless-stopped
+    environment:
+      FILE_SIZE_LIMIT: "5242880"
+      BUCKET_NAME: uploads
+      SITE_ADDRESS: ":80"
+    networks:
+      - plane-internal
+      - dev-net
+
+  plane-db:
+    image: postgres:15.7-alpine
+    container_name: plane-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: plane
+      POSTGRES_PASSWORD: plane
+      POSTGRES_DB: plane
+    volumes:
+      - plane_pgdata:/var/lib/postgresql/data
+    networks:
+      - plane-internal
+
+  plane-redis:
+    image: valkey/valkey:7.2-alpine
+    container_name: plane-redis
+    restart: unless-stopped
+    volumes:
+      - plane_redis:/data
+    networks:
+      - plane-internal
+
+  plane-mq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: plane-mq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: plane
+      RABBITMQ_DEFAULT_PASS: plane
+    volumes:
+      - plane_mq:/var/lib/rabbitmq
+    networks:
+      - plane-internal
+
+  plane-minio:
+    image: minio/minio:latest
+    container_name: plane-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9090"
+    environment:
+      MINIO_ROOT_USER: plane
+      MINIO_ROOT_PASSWORD: planesecret
+    volumes:
+      - plane_minio:/data
+    networks:
+      - plane-internal
+
+networks:
+  plane-internal:
+    driver: bridge
+  dev-net:
+    external: true
+
+volumes:
+  plane_pgdata:
+  plane_redis:
+  plane_mq:
+  plane_minio:
