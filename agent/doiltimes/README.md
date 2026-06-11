@@ -29,9 +29,9 @@ crontab -e
 ```
 
 ```cron
-# 매일 07:00(조간) / 18:00(석간) KST — DoilTimes 발행
-0 7 * * *  /mnt/c/DEV/docker/agent/doiltimes/run.sh >> /mnt/c/DEV/docker/agent/doiltimes/output/cron.log 2>&1
-0 18 * * * /mnt/c/DEV/docker/agent/doiltimes/run.sh >> /mnt/c/DEV/docker/agent/doiltimes/output/cron.log 2>&1
+# 매일 07:00(조간) / 18:00(석간) KST — DoilTimes 발행 (시각만 다르고 명령 동일 → 7,18 한 줄)
+# 로그는 '>' (덮어쓰기)로 — 매 실행 시 마지막 분만 남아 파일이 안 커진다. 백업 불필요.
+0 7,18 * * * /mnt/c/DEV/docker/agent/doiltimes/run.sh > /mnt/c/DEV/docker/agent/doiltimes/output/cron.log 2>&1
 ```
 
 - `run.sh` 가 `~/.doiltimes.env`(OAuth 토큰)를 자동 로드하므로 crontab 에 토큰을 직접 쓸 필요 없다.

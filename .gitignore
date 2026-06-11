@@ -58,6 +58,9 @@ agent/*/state/
 agent/*/profile/
 agent/*/node_modules/
 
+# DoilTimes 날짜별 발행물(자동생성) — index/about/privacy 스캐폴딩만 추적
+nginx/html/times/20*_*.html
+
 # CouchDB local.ini — 런타임에 admin 해시/uuid 가 기록됨 (비밀)
 couchdb/local.ini
 

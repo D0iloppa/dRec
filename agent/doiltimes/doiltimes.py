@@ -34,7 +34,41 @@ from xml.etree import ElementTree as ET
 BASE = Path(__file__).resolve().parent
 REPO_ROOT = BASE.parents[1]          # /mnt/c/DEV/docker
 OUTPUT_DIR = BASE / "output"
+PUBLISH_DIR = REPO_ROOT / "nginx" / "html" / "times"   # 정적 서빙 → https://doil.me/times/
+SITE_URL = "https://doil.me/times"
+RETENTION_DAYS = 30          # 발행물 보관 기간 — 초과분은 자동 삭제 (디스크 보호)
 KST = timezone(timedelta(hours=9))
+
+# 사이트 상단 내비 (AdSense 내비게이션 요건 + 사용자 이동)
+NAV = ('<nav style="max-width:680px;margin:10px auto;font:13px/1.6 sans-serif;color:#888">'
+       '<a href="/times/" style="color:#555;text-decoration:none">📰 DoilTimes</a> · '
+       '<a href="/times/about.html" style="color:#555;text-decoration:none">소개</a> · '
+       '<a href="/times/privacy.html" style="color:#555;text-decoration:none">개인정보처리방침</a></nav>')
+
+# 언어 전환 탭 — 페이지 이동 없이 CSS display 로 .en/.ko/.kx 섹션을 보이고/숨김. (웹 전용; 기본 '영한')
+TABS_CSS = (
+    "<style>"
+    ".dt-tabs{position:sticky;top:0;z-index:20;max-width:680px;margin:0 auto;padding:8px 10px;"
+    "text-align:right;background:#f4f1ea}"
+    ".dt-tabs button{font:13px/1 sans-serif;border:1px solid #ccc;background:#fff;color:#333;"
+    "padding:5px 13px;margin-left:5px;border-radius:14px;cursor:pointer}"
+    ".dt-tabs button.dt-active{background:#1a1a1a;color:#fff;border-color:#1a1a1a}"
+    "body.dt-en .ko,body.dt-en .kx{display:none}"      # '영어' : 영어만
+    "body.dt-ko .en,body.dt-ko .kx{display:none}"      # '한글' : 한글만
+    "</style>"                                          # '영한'(dt-both): 숨김 규칙 없음 = 전체 표시
+)
+TABS_BODY = (
+    '<div class="dt-tabs">'
+    '<button class="dt-active" onclick="dtMode(\'both\',this)">영한</button>'
+    '<button onclick="dtMode(\'en\',this)">영어</button>'
+    '<button onclick="dtMode(\'ko\',this)">한글</button>'
+    '</div>'
+    '<script>function dtMode(m,b){var c=document.body.classList;'
+    "c.remove('dt-en','dt-ko','dt-both');c.add('dt-'+m);"
+    "document.querySelectorAll('.dt-tabs button').forEach(function(x){x.classList.remove('dt-active');});"
+    'b.classList.add("dt-active");}'
+    "document.body.classList.add('dt-both');</script>"
+)
 
 # (이름, RSS URL, 최대 기사 수)
 FEEDS = [
@@ -129,31 +163,40 @@ def scrape() -> list[dict]:
 # ---------------------------------------------------------------- AI 발행
 
 PROMPT_TEMPLATE = """\
-당신은 1인 신문 "DoilTimes"의 편집장이다. 아래 오늘자 기사 목록(JSON)으로 신문 HTML을 만들어라.
+당신은 1인 신문 "DoilTimes"의 편집장이다. 아래 오늘자 기사 목록(JSON)을 읽고, 영어 학습용 영·한 신문
+콘텐츠를 만들어 **JSON 으로만** 출력하라. (HTML 이 아니라 데이터만 — 레이아웃은 별도 시스템이 입힌다.)
 
-요구사항:
-- 완성된 단일 HTML 문서 하나만 출력한다. 설명·마크다운 코드펜스 금지. <!DOCTYPE html> 로 시작할 것.
-- 이메일 본문용 HTML: 인라인 스타일만 사용, JS/외부 CSS/외부 폰트 금지, 본문 폭 max-width 680px 중앙 정렬.
-- 신문 느낌의 머리판: 제호 "DoilTimes", 판 종류 "{edition}", 날짜 {date_str}, 가는 괘선.
-  ("조간"이면 밤사이~오전 소식 정리, "석간"이면 낮 동안의 소식 정리라는 성격을 머리판/칼럼 톤에 반영.)
-- 기사 전체를 읽고 중요도 순으로 재배치하고, 톱기사 1건을 골라 크게 다룬다. 출처별 나열 금지.
-- 각 기사: 제목(원문 링크 <a>), 한 줄 요약, 그리고 "🤖 AI의 시선" — 편집장으로서의 짧은 논평(1~2문장, 단순 요약 반복 금지, 맥락·전망·비판적 시각).
-- 비슷한 주제의 기사는 한 묶음으로 처리해도 된다.
-- 마지막에 "오늘의 시선" 섹션: 오늘 뉴스 전체를 관통하는 흐름에 대한 편집장 칼럼 3~5문장.
-- 전부 한국어 (Hacker News 기사도 한국어로 요약·논평).
+작업:
+- 기사 전체를 읽고 중요도 순으로 재배치한다. 톱기사 1건 선정(is_top). 비슷한 주제는 한 묶음으로 합쳐도 된다.
+- 광고·중복·시시한 항목은 버린다. 8~12건 내외로 추린다.
+- 각 기사를 영어와 한국어 "같은 내용"으로(번역 대응) 작성한다. 영어는 중급 학습자용으로 자연스럽게(직역체 금지).
+- 판 성격 반영: "{edition}" 이 "조간"이면 밤사이~오전 소식, "석간"이면 낮 동안의 소식 정리 톤.
+- AI 논평(view)은 단순 요약 반복 금지 — 맥락·전망·비판적 시각.
+
+출력 형식(엄수): 아래 스키마의 JSON 객체 하나만. 설명·마크다운·코드펜스 금지. { 로 시작.
+{
+  "articles": [
+    {
+      "is_top": true,
+      "url": "원문 링크",
+      "en": {"title": "English title", "summary": "1~2 sentences", "view": "AI's commentary"},
+      "ko": {"title": "한국어 제목", "summary": "1~2문장 요약", "view": "AI 논평"},
+      "kx": [{"term": "expression/word", "meaning": "한국어 뜻"}]
+    }
+  ],
+  "column": {"en": "Editor's Column, 3-5 sentences on the day's overall flow",
+             "ko": "오늘의 시선, 같은 내용 한국어"}
+}
+- kx 는 기사당 2~3개. Hacker News 기사도 동일 형식. 맞는 기사가 없으면 articles 는 빈 배열.
 
 기사 목록:
-{articles_json}
+__ARTICLES_JSON__
 """
 
 
-def generate_html(articles: list[dict], date_str: str, edition: str) -> str:
-    prompt = PROMPT_TEMPLATE.format(
-        date_str=date_str,
-        edition=edition,
-        articles_json=json.dumps(articles, ensure_ascii=False, indent=1),
-    )
-    log(f"Claude 호출 — 모델 {MODEL}, 기사 {len(articles)}건 (타임아웃 없음, 끝까지 대기)")
+def _claude_json(prompt: str, label: str) -> dict:
+    """claude 를 호출해 JSON 객체 하나를 받아 파싱. 하트비트 로그 + 데드로그."""
+    log(f"Claude 호출 — 모델 {MODEL}, {label} (타임아웃 없음, 끝까지 대기)")
     proc = subprocess.Popen(
         ["claude", "-p", "--model", MODEL, "--output-format", "text"],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -173,13 +216,113 @@ def generate_html(articles: list[dict], date_str: str, edition: str) -> str:
         sys.exit(f"[데드로그] claude 실행 실패 (exit {proc.returncode}, {elapsed}초): "
                  f"{(stderr or '').strip()[:500] or '(stderr 없음)'}")
     log(f"생성 완료 — 소요 {elapsed}초")
-    out = stdout.strip()
-    # 코드펜스로 감싸 나오는 경우 방어
-    out = re.sub(r"^```(?:html)?\s*", "", out)
-    out = re.sub(r"\s*```$", "", out)
-    if "<html" not in out.lower():
-        sys.exit(f"claude 출력이 HTML 이 아님: {out[:200]}")
-    return out
+    m = re.search(r"\{.*\}", stdout, re.DOTALL)   # 본문 중 JSON 객체만 추출
+    if not m:
+        sys.exit(f"[데드로그] JSON 객체를 못 찾음. 원문 앞부분: {stdout[:300]}")
+    try:
+        return json.loads(m.group(0))
+    except json.JSONDecodeError as e:
+        sys.exit(f"[데드로그] JSON 파싱 실패: {e}\n원문: {stdout[:400]}")
+
+
+def generate_html(articles: list[dict], date_str: str, edition: str) -> str:
+    # .format() 은 JSON 스키마의 중괄호와 충돌하므로 literal replace 사용
+    prompt = (PROMPT_TEMPLATE
+              .replace("{edition}", edition)
+              .replace("__ARTICLES_JSON__", json.dumps(articles, ensure_ascii=False, indent=1)))
+    data = _claude_json(prompt, f"기사 {len(articles)}건")
+    return render_news_html(data, date_str, edition)
+
+
+def render_news_html(data: dict, date_str: str, edition: str) -> str:
+    """Claude 가 만든 콘텐츠(JSON)에 HTML 구조와 .en/.ko/.kx class 를 입힌다.
+    class 는 파이썬이 보장하므로 언어 탭 토글이 항상 정확히 동작한다."""
+    def esc(s):
+        return htmllib.escape(str(s or ""))
+
+    SERIF = "Georgia,'Times New Roman','Nanum Myeongjo',serif"
+    blocks = ""
+    for a in data.get("articles", []):
+        en, ko = a.get("en", {}), a.get("ko", {})
+        top = a.get("is_top")
+        ten = "30px" if top else "21px"
+        toplabel = ('<div style="color:#a01e1e;font:700 12px Georgia,serif;letter-spacing:1.5px;'
+                    'margin-bottom:6px">★ TOP STORY · 오늘의 머릿기사</div>') if top else ""
+        kx = "".join(
+            f'<li style="margin:3px 0"><i>{esc(k.get("term"))}</i> — {esc(k.get("meaning"))}</li>'
+            for k in a.get("kx", []) if k.get("term"))
+        blocks += f"""
+        <article style="border-bottom:1px solid #ddd4c2;padding:20px 0">
+          {toplabel}
+          <div class="en"><a href="{esc(a.get('url'))}" style="display:block;font:800 {ten}/1.25 {SERIF};
+            color:#1a1a1a;text-decoration:none">{esc(en.get('title'))}</a></div>
+          <div class="ko"><div style="border-left:3px solid #a01e1e;padding-left:9px;margin:9px 0;
+            font:600 15px {SERIF};color:#555">"{esc(ko.get('title'))}"</div></div>
+          <div class="en"><p style="margin:9px 0;line-height:1.7;color:#222;font-family:{SERIF}">
+            <sup style="color:#999;font-weight:700">EN</sup> {esc(en.get('summary'))}</p></div>
+          <div class="ko"><p style="margin:9px 0;line-height:1.75;color:#333;font-family:{SERIF}">
+            <sup style="color:#999;font-weight:700">KO</sup> {esc(ko.get('summary'))}</p></div>
+          <div style="background:#efe9da;border-radius:6px;padding:11px 14px;margin:10px 0">
+            <div style="font:700 13px {SERIF};color:#1a1a1a;margin-bottom:5px">🔵 AI's View</div>
+            <div class="en"><p style="margin:4px 0;line-height:1.65;color:#333;font-family:{SERIF}">
+              <sup style="color:#999;font-weight:700">EN</sup> {esc(en.get('view'))}</p></div>
+            <div class="ko"><p style="margin:4px 0;line-height:1.7;color:#333;font-family:{SERIF}">
+              <sup style="color:#999;font-weight:700">KO</sup> {esc(ko.get('view'))}</p></div>
+          </div>
+          <div class="kx" style="background:#f3eee1;border-radius:6px;padding:10px 14px;margin:8px 0">
+            <div style="font:700 13px {SERIF};color:#1a1a1a">🔑 Key Expressions</div>
+            <ul style="margin:6px 0 0;padding-left:18px;font:13px/1.5 {SERIF};color:#555">{kx or '<li>—</li>'}</ul>
+          </div>
+        </article>"""
+
+    col = data.get("column", {})
+    column_html = f"""
+        <section style="margin-top:22px;background:#efe9da;border-radius:8px;padding:16px 18px">
+          <div class="en"><div style="font:800 16px {SERIF}">📝 Editor's Column</div>
+            <p style="line-height:1.75;color:#222;font-family:{SERIF}">{esc(col.get('en'))}</p></div>
+          <div class="ko"><div style="font:800 16px {SERIF};margin-top:8px">📝 오늘의 시선</div>
+            <p style="line-height:1.8;color:#333;font-family:{SERIF}">{esc(col.get('ko'))}</p></div>
+        </section>""" if (col.get("en") or col.get("ko")) else ""
+
+    # 마스트헤드 요소
+    hero_url = f"{SITE_URL}/hero.png"
+    edition_en = "MORNING EDITION" if edition == "조간" else "EVENING EDITION"
+    launch = datetime(2026, 6, 11, tzinfo=KST)
+    days = (datetime.now(KST).date() - launch.date()).days
+    issue_no = max(1, days * 2 + (0 if edition == "조간" else 1) + 1)
+    titles = [esc((a.get("en") or {}).get("title", "")) for a in data.get("articles", [])][:6]
+    ticker = " &nbsp;·&nbsp; ".join(" ".join(t.split()[:6]) for t in titles if t)
+
+    return f"""<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DoilTimes {edition} — {date_str}</title></head>
+<body style="margin:0;background:#f4f1ea;font-family:{SERIF};color:#1a1a1a">
+<div style="max-width:680px;margin:auto;background:#f4f1ea">
+
+  <header style="background:#1a1815;color:#f4f1ea;padding:16px 22px 0;text-align:center">
+    <img src="{hero_url}" alt="" width="84"
+         style="width:84px;height:84px;border-radius:50%;object-fit:cover;filter:grayscale(35%);margin-bottom:6px">
+    <div style="font:11px Georgia,serif;letter-spacing:4px;color:#c9a227">{edition_en} · {edition}</div>
+    <div style="border-top:1px solid #4a443a;border-bottom:1px solid #4a443a;margin:8px 0;padding:6px 0">
+      <span style="font:800 46px {SERIF};letter-spacing:1px">DoilTimes</span>
+    </div>
+    <table width="100%" style="border-collapse:collapse"><tr>
+      <td style="font:10px Georgia,serif;letter-spacing:1px;color:#9a9384;text-align:left">1면 미디어 · INDEPENDENT</td>
+      <td style="font:13px Georgia,serif;color:#c9a227;text-align:center">{date_str}</td>
+      <td style="font:10px Georgia,serif;letter-spacing:1px;color:#9a9384;text-align:right">제 {issue_no} 호</td>
+    </tr></table>
+    <div style="background:#100e0b;margin:10px -22px 0;padding:7px 22px;font:11px Georgia,serif;
+      letter-spacing:.3px;color:#cfc8bb;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+      <b style="color:#a01e1e;letter-spacing:1px">TODAY</b> &nbsp; {ticker}</div>
+  </header>
+
+  <div style="padding:18px 22px">
+    {blocks or '<p style="color:#aaa">오늘은 발행할 기사가 없습니다.</p>'}
+    {column_html}
+    <p style="color:#9a9384;font:11px Georgia,serif;border-top:1px solid #ddd4c2;padding-top:12px;margin-top:22px">
+      AI가 매일 뉴스를 요약·논평하는 영어 학습용 자동 브리핑 · 원문은 각 제목 링크 참조</p>
+  </div>
+</div></body></html>"""
 
 
 def fallback_html(articles: list[dict], date_str: str, edition: str) -> str:
@@ -191,6 +334,100 @@ def fallback_html(articles: list[dict], date_str: str, edition: str) -> str:
     )
     return (f"<!DOCTYPE html><html><body style='max-width:680px;margin:auto'>"
             f"<h1>DoilTimes {edition} (배선 테스트)</h1><p>{date_str}</p><ul>{items}</ul></body></html>")
+
+
+# ---------------------------------------------------------------- 웹 발행 (doil.me/times)
+
+def adsense_snippet(client: str) -> str:
+    if not client:
+        return ""
+    return (f'<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js'
+            f'?client={client}" crossorigin="anonymous"></script>')
+
+
+def adsense_unit(client: str, slot: str) -> str:
+    """페이지 최하단 디스플레이 광고 유닛. client·slot 둘 다 있을 때만 렌더(없으면 빈 문자열)."""
+    if not (client and slot):
+        return ""
+    return (f'<ins class="adsbygoogle" style="display:block;max-width:680px;margin:14px auto"'
+            f' data-ad-client="{client}" data-ad-slot="{slot}"'
+            f' data-ad-format="auto" data-full-width-responsive="true"></ins>'
+            f'<script>(adsbygoogle=window.adsbygoogle||[]).push({{}});</script>')
+
+
+def _inject_head(html: str, extra: str) -> str:
+    if not extra:
+        return html
+    if "</head>" in html:
+        return html.replace("</head>", extra + "\n</head>", 1)
+    if "<head>" in html:
+        return html.replace("<head>", "<head>\n" + extra, 1)
+    return re.sub(r"(<body[^>]*>)", r"<head>" + extra + r"</head>\1", html, count=1) or (extra + html)
+
+
+def _inject_body_top(html: str, extra: str) -> str:
+    m = re.search(r"<body[^>]*>", html)
+    return html[:m.end()] + extra + html[m.end():] if m else extra + html
+
+
+def _inject_body_bottom(html: str, extra: str) -> str:
+    if not extra:
+        return html
+    return html.replace("</body>", extra + "</body>", 1) if "</body>" in html else html + extra
+
+
+def publish_web(html: str, now: datetime, edition: str, env: dict, target: Path) -> str:
+    """광고 스니펫 + 내비를 주입해 정적 HTML 로 발행. 발행 URL 반환."""
+    client = env.get("ADSENSE_CLIENT", "")
+    web = _inject_head(html, adsense_snippet(client) + TABS_CSS)
+    web = _inject_body_top(web, NAV + TABS_BODY)
+    web = _inject_body_bottom(web, adsense_unit(client, env.get("ADSENSE_SLOT", "")))
+    target.mkdir(parents=True, exist_ok=True)
+    fname = f"{now:%Y-%m-%d}_{edition}.html"
+    (target / fname).write_text(web, encoding="utf-8")
+    if target == PUBLISH_DIR:
+        rebuild_index(env)
+    return f"{SITE_URL}/{fname}"
+
+
+def rebuild_index(env: dict) -> None:
+    """발행된 날짜별 글을 모아 /times/ 인덱스 페이지 + posts.json 매니페스트 재생성.
+    보관기간(RETENTION_DAYS) 초과 발행물은 먼저 삭제한다 (디스크 보호)."""
+    cutoff = (datetime.now(KST) - timedelta(days=RETENTION_DAYS)).strftime("%Y-%m-%d")
+    for p in PUBLISH_DIR.glob("20*_*.html"):
+        if p.stem.partition("_")[0] < cutoff:      # 파일명 날짜(YYYY-MM-DD) 문자열 비교
+            p.unlink(missing_ok=True)
+            log(f"보관기간 초과 삭제: {p.name}")
+    posts = sorted(PUBLISH_DIR.glob("20*_*.html"), reverse=True)
+    # 매니페스트 (홈페이지 DoilTimes 섹션이 fetch) — 최신순
+    manifest = []
+    for p in posts:
+        date, _, ed = p.stem.partition("_")
+        manifest.append({"date": date, "edition": ed, "url": f"/times/{p.name}"})
+    (PUBLISH_DIR / "posts.json").write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+
+    items = ""
+    for p in posts:
+        date, _, ed = p.stem.partition("_")
+        items += f'<li style="margin:6px 0"><a href="/times/{p.name}" style="color:#1a1a1a">{date} · {ed}</a></li>'
+    html = f"""<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DoilTimes — AI 뉴스 브리핑</title>
+<meta name="description" content="AI가 매일 주요 뉴스를 요약하고 논평하는 자동 브리핑 신문, DoilTimes.">
+{adsense_snippet(env.get("ADSENSE_CLIENT", ""))}</head>
+<body style="font-family:-apple-system,'Malgun Gothic',sans-serif;background:#faf9f5;margin:0">
+<div style="max-width:680px;margin:auto;padding:24px">
+{NAV}
+<div style="border-bottom:3px double #1a1a1a;padding-bottom:8px"><span style="font-size:26px;font-weight:800">DoilTimes</span></div>
+<p style="color:#555;line-height:1.7">AI가 매일 아침·저녁으로 주요 뉴스를 직접 읽고 요약·논평하는 자동 브리핑 신문입니다.
+사람의 시선과 다른 'AI의 시선'으로 그날의 흐름을 정리합니다.</p>
+<h2 style="font-size:16px;border-bottom:1px solid #ddd;padding-bottom:4px">지난 호</h2>
+<ul style="list-style:none;padding:0">{items or '<li style="color:#aaa">아직 발행된 글이 없습니다.</li>'}</ul>
+{adsense_unit(env.get("ADSENSE_CLIENT", ""), env.get("ADSENSE_SLOT", ""))}
+<p style="color:#aaa;font-size:11px;border-top:1px solid #eee;padding-top:10px;margin-top:24px">
+© DoilTimes · 본 사이트의 요약·논평은 AI가 자동 생성하며, 원문 출처는 각 글의 링크를 따릅니다.</p>
+</div></body></html>"""
+    (PUBLISH_DIR / "index.html").write_text(html, encoding="utf-8")
 
 
 # ---------------------------------------------------------------- 발송
@@ -241,19 +478,19 @@ def main() -> None:
     html = (fallback_html(articles, date_str, edition) if args.no_ai
             else generate_html(articles, date_str, edition))
 
-    OUTPUT_DIR.mkdir(exist_ok=True)
-    out_path = OUTPUT_DIR / f"DoilTimes_{now:%Y-%m-%d}_{edition}.html"
-    out_path.write_text(html, encoding="utf-8")
-    log(f"발행: {out_path}")
+    # 웹 발행 — --no-ai(배선 테스트)는 라이브 사이트 대신 output/ 으로
+    target = OUTPUT_DIR if args.no_ai else PUBLISH_DIR
+    url = publish_web(html, now, edition, env, target)
+    log(f"웹 발행: {url if target is PUBLISH_DIR else target}")
 
     if args.no_mail:
-        log("--no-mail: 발송 생략 (HTML 보존)")
+        log("--no-mail: 메일 발송 생략")
         return
 
-    send_mail(html, date_str, edition, env)
-    # 발송 성공 시에만 도달 — 실패하면 send_mail 에서 예외로 중단되어 HTML 보존
-    out_path.unlink()
-    log(f"발송 성공 → HTML 삭제: {out_path.name}")
+    # 메일은 광고 없이(정책) — 상단에 '웹에서 보기' 배너만 추가
+    banner = (f'<div style="max-width:680px;margin:0 auto 12px;font:13px sans-serif;color:#888">'
+              f'웹에서 보기: <a href="{url}" style="color:#36c">{url}</a></div>')
+    send_mail(_inject_body_top(html, banner), date_str, edition, env)
 
 
 if __name__ == "__main__":
