@@ -1,6 +1,9 @@
 :root { font-family: system-ui, -apple-system, sans-serif; color: #1a1a1a; }
 * { box-sizing: border-box; }
-body { margin: 0; background: #f1f5f9; }
+html, body, #root { height: 100%; }
+body { margin: 0; background: #f1f5f9; overflow: hidden; }
+/* 풀스크린 Phaser 캔버스는 inline 기본값의 baseline 여백 때문에 100vh를 넘겨 페이지 스크롤을 유발 → block 고정 */
+.phaser-fullscreen canvas { display: block; }
 .app { max-width: 600px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
 .app h1 { margin: 0 0 .25rem; }
 .muted { color: #888; font-size: .9rem; }
@@ -107,6 +110,11 @@ button.mini { padding: .15rem .5rem; font-size: .75rem; margin-left: .5rem; }
 
 /* ===== Phaser 풀스크린 호스트 + DOM 폼 ===== */
 .phaser-fullscreen { width: 100vw; height: 100vh; overflow: hidden; }
+/* 하단 광고 배너가 있는 화면(로그인·로비)은 canvas 높이를 줄여 공간을 예약 — 겹침 없음 */
+.dopl-shell { width: 100vw; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+.dopl-shell .phaser-fullscreen { flex: 1 1 auto; width: 100%; height: auto; min-height: 0; }
+.dopl-adbar { flex: 0 0 auto; display: flex; justify-content: center; align-items: center;
+  min-height: 90px; padding: 6px 8px; background: #0b3a5b; }
 .auth-dom { width: 340px; max-height: 96vh; overflow-y: auto; text-align: center; padding: 4px; }
 .auth-dom .logo3d { font-size: 3.6rem; margin-bottom: 0; }
 .auth-dom .logo-sub { margin: .1rem 0 1rem; }
@@ -165,6 +173,12 @@ button.mini { padding: .15rem .5rem; font-size: .75rem; margin-left: .5rem; }
 .lb-rooms-head { display: flex; justify-content: space-between; align-items: center; padding: .45rem .8rem;
   background: linear-gradient(#dff1fe, #bfe2f8); border-bottom: 2px solid #7db9e0; box-shadow: inset 0 1px 0 #fff; }
 .lb-rooms-head h3 { margin: 0; font-size: 1.02rem; color: #0f5e9e; text-shadow: 0 1px 0 #fff; }
+/* 코드로 입장 — 방 코드(4자리) 직접 입력 후 입장 */
+.lb-joincode { display: flex; gap: 5px; align-items: center; margin-left: auto; margin-right: 6px; }
+.lb-joincode input { width: 84px; margin: 0; padding: .34rem .5rem; border: 2px solid #7db9e0; border-radius: 8px;
+  background: #f6fbff; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; text-align: center; }
+.lb-joincode input:focus { outline: none; border-color: #3aa4e8; }
+.lb-joincode .lb-btn { padding: .34rem .7rem; }
 .lb-table-wrap { flex: 1; overflow-y: auto; }
 .lb-table { width: 100%; border-collapse: collapse; }
 .lb-table th { position: sticky; top: 0; background: linear-gradient(#f8fcff, #e9f4fd); color: #4f7ea3; font-size: .76rem;
@@ -478,20 +492,37 @@ button.mini { padding: .15rem .5rem; font-size: .75rem; margin-left: .5rem; }
 .base-opt.sel { border-color: #22c55e; background: #f0fdf4; }
 
 /* ===== 방 만들기 — 게임 카탈로그 ===== */
-.gamecat-panel { max-width: 640px; }
-.gc-grid { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(2, 1fr); gap: .6rem; padding: .8rem; }
-.gc-card { position: relative; border: 3px solid #d9ecfa; border-radius: 14px; overflow: hidden; cursor: pointer;
-  background: #fff; transition: .12s; }
+.gamecat-panel { max-width: 760px; }
+/* 게임 카탈로그 — 3열×2행 페이지를 가로 스냅. 점 인디케이터·화살표·터치 스와이프로 페이지 이동 */
+.gc-railwrap { position: relative; }
+.gc-pages { display: flex; height: 360px; overflow-x: auto; overflow-y: hidden;
+  scroll-snap-type: x mandatory; scroll-behavior: smooth; scrollbar-width: none; -ms-overflow-style: none; }
+.gc-pages::-webkit-scrollbar { display: none; }
+.gc-page { flex: 0 0 100%; scroll-snap-align: start; display: grid;
+  grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr; gap: .6rem; padding: .8rem; }
+.gc-nav { position: absolute; top: 50%; transform: translateY(-50%); z-index: 2; width: 34px; height: 34px;
+  border: none; border-radius: 50%; background: rgba(15,94,158,.85); color: #fff; font-size: 22px; line-height: 1;
+  cursor: pointer; box-shadow: 0 2px 6px rgba(0,40,90,.35); display: flex; align-items: center; justify-content: center; }
+.gc-nav:hover { background: #0f5e9e; }
+.gc-prev { left: -4px; } .gc-next { right: -4px; }
+.gc-dots { display: flex; justify-content: center; align-items: center; gap: 7px; padding: 8px 0 2px; }
+.gc-dot { width: 9px; height: 9px; padding: 0; border: none; border-radius: 50%; background: #cfe3f5; cursor: pointer; transition: .15s; }
+.gc-dot.on { background: #0f5e9e; width: 22px; border-radius: 5px; }
+.gc-card { position: relative; display: flex; flex-direction: column; border: 3px solid #d9ecfa; border-radius: 14px;
+  overflow: hidden; cursor: pointer; background: #fff; transition: .12s; }
 .gc-card:hover { transform: translateY(-2px); border-color: #3aa4e8; box-shadow: 0 6px 14px rgba(0,50,110,.2); }
 .gc-card.sel { border-color: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,.25), 0 6px 14px rgba(0,50,110,.2); }
-.gc-img { height: 110px; background: #0f172a; }
-.gc-img img { width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; display: block; }
+/* 이미지는 남는 공간을 채우고(가로세로 비율 유지·왜곡 없음), 제목 바는 항상 카드 하단에 고정 노출 */
+.gc-img { flex: 1 1 auto; min-height: 0; background: #0f172a; }
+.gc-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .gc-img.noimg { background: linear-gradient(#3aa4e8, #1d7fc4); }
-.gc-info { padding: .45rem .6rem .55rem; }
-.gc-info b { color: #0f5e9e; display: block; }
-.gc-info small { color: #5b87a6; font-weight: 700; display: block; margin: .1rem 0 .25rem; }
+.gc-info { flex: 0 0 auto; padding: .38rem .55rem .42rem; background: #fff; border-top: 2px solid #eef6fc; text-align: left; }
+.gc-info b { display: block; color: #0f5e9e; font-size: .9rem; line-height: 1.25;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gc-info small { display: block; color: #5b87a6; font-weight: 700; font-size: .7rem; margin: .06rem 0 .22rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gc-players { display: inline-block; background: #e9f6ff; border: 1px solid #bfe2f8; color: #1769a8;
-  border-radius: 999px; padding: .08rem .5rem; font-size: .72rem; font-weight: 800; }
+  border-radius: 999px; padding: .06rem .45rem; font-size: .66rem; font-weight: 800; }
 .gc-check { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 50%;
   background: #22c55e; color: #fff; font-weight: 900; display: none; align-items: center; justify-content: center;
   box-shadow: 0 2px 4px rgba(0,0,0,.3); }

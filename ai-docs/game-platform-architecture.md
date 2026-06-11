@@ -1,5 +1,8 @@
 # 게임 플랫폼 아키텍처 설계 (Phaser + 모노레포)
 
+> ⚠️ 이 문서는 **구현 전 목표 설계**라 현행 코드와 일부 다르다(예: 패키지 `./server`/`./client` exports 분리는 미적용 — 씬은 `apps/client`에 직접 둠).
+> **실제 구조와 새 게임 추가 절차는 → [`adding-a-game.md`](adding-a-game.md) (as-built, 우선 참고).**
+>
 > 큐플레이 카피캣 멀티 게임 플랫폼의 **목표 아키텍처**. 구현 전 설계 문서.
 > 결정사항: **npm workspaces 모노레포**, **인게임만 Phaser**(로비/메뉴/채팅은 React), **서버 권위(Node+Socket.IO)** 유지.
 > **doil-sb를 모노레포 `apps/server`로 편입**(백엔드는 별도 서버 분리하지 않음). 전용 서브도메인 **`dopl.doil.me`**(DOPL = doil-playground)로 서비스.

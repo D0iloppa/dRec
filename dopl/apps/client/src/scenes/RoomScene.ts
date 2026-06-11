@@ -12,6 +12,12 @@ import { OxScene } from '../games/ox/OxScene';
 import { CommonQuizScene } from '../games/common-quiz/CommonQuizScene';
 import { SpeedQuizScene } from '../games/speed-quiz/SpeedQuizScene';
 import { MafiaScene } from '../games/mafia/MafiaScene';
+import { BangScene } from '../games/bang/BangScene';
+import { SplendorScene } from '../games/splendor/SplendorScene';
+import { LiarScene } from '../games/liar/LiarScene';
+import { OneCardScene } from '../games/onecard/OneCardScene';
+import { PuyoScene } from '../games/puyo/PuyoScene';
+import { PokerScene } from '../games/poker/PokerScene';
 
 interface DoplGameScene extends Phaser.Scene {
   sendAction: (a: unknown) => void;
@@ -22,6 +28,12 @@ const GAME_SCENES: Record<string, new () => DoplGameScene> = {
   'common-quiz': CommonQuizScene as unknown as new () => DoplGameScene,
   'speed-quiz': SpeedQuizScene as unknown as new () => DoplGameScene,
   'mafia': MafiaScene as unknown as new () => DoplGameScene,
+  'bang': BangScene as unknown as new () => DoplGameScene,
+  'splendor': SplendorScene as unknown as new () => DoplGameScene,
+  'liar': LiarScene as unknown as new () => DoplGameScene,
+  'onecard': OneCardScene as unknown as new () => DoplGameScene,
+  'puyo': PuyoScene as unknown as new () => DoplGameScene,
+  'poker': PokerScene as unknown as new () => DoplGameScene,
 };
 
 const PHASE_LABEL: Record<string, string> = { lobby: '대기실', playing: '진행 중', ended: '종료' };

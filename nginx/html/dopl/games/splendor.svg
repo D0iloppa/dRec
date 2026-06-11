@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200">
+  <rect width="320" height="200" fill="#0f172a"/>
+  <rect width="320" height="200" fill="url(#g)" opacity="0.4"/>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1e293b"/>
+      <stop offset="1" stop-color="#312e81"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(160 86)">
+    <polygon points="0,-46 34,-14 22,40 -22,40 -34,-14" fill="#22c55e" stroke="#bbf7d0" stroke-width="2"/>
+    <polygon points="0,-46 34,-14 0,-6 -34,-14" fill="#86efac" opacity="0.7"/>
+    <polygon points="0,-6 22,40 0,46 -22,40" fill="#15803d" opacity="0.8"/>
+  </g>
+  <text x="160" y="170" text-anchor="middle" fill="#e2e8f0" font-family="sans-serif" font-size="26" font-weight="bold">스플랜더</text>
+  <text x="160" y="190" text-anchor="middle" fill="#a5b4fc" font-family="sans-serif" font-size="12">💎 보석상의 길</text>
+</svg>

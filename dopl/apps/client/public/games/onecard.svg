@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200">
+  <rect width="320" height="200" fill="#0f172a"/>
+  <g transform="translate(120 50) rotate(-12)">
+    <rect width="80" height="112" rx="8" fill="#f8fafc" stroke="#334155" stroke-width="2"/>
+    <text x="10" y="26" font-family="sans-serif" font-size="22" font-weight="bold" fill="#dc2626">A</text>
+    <text x="40" y="72" font-family="sans-serif" font-size="40" fill="#dc2626" text-anchor="middle">♥</text>
+  </g>
+  <g transform="translate(160 40) rotate(8)">
+    <rect width="80" height="112" rx="8" fill="#f8fafc" stroke="#334155" stroke-width="2"/>
+    <text x="10" y="26" font-family="sans-serif" font-size="22" font-weight="bold" fill="#1e293b">7</text>
+    <text x="40" y="72" font-family="sans-serif" font-size="40" fill="#1e293b" text-anchor="middle">♠</text>
+  </g>
+  <text x="160" y="185" font-family="sans-serif" font-size="22" font-weight="bold" fill="#fde68a" text-anchor="middle">🃏 원카드</text>
+</svg>

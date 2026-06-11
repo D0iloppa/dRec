@@ -21,6 +21,12 @@ const GAME_DESC: Record<string, string> = {
   'common-quiz': '4지선다 상식 퀴즈 — 틀리면 탈락!',
   'speed-quiz': '채팅 타이핑 선착 정답! 초성 힌트까지',
   'mafia': '밤과 낮, 거짓말쟁이를 찾아라',
+  'bang': '서부 총잡이 정체 추리 — 보안관·무법자·배신자',
+  'splendor': '보석을 모아 개발카드·귀족으로 명성 15점 선점',
+  'liar': '제시어를 모르는 라이어를 힌트로 색출하라',
+  'onecard': '같은 무늬·숫자로 손패를 먼저 비워라 (공격·스킵·방향)',
+  'poker': '텍사스 홀덤 — 블러프와 베팅의 심리전',
+  'puyo': '실시간 1:1 블록 퍼즐 — 연쇄로 상대를 방해뿌요로 묻어라',
 };
 
 export class LobbyScene extends Phaser.Scene {
@@ -109,6 +115,10 @@ export class LobbyScene extends Phaser.Scene {
           <section class="lb-rooms">
             <div class="lb-rooms-head">
               <h3>🎮 게임 방</h3>
+              <form id="lbJoinForm" class="lb-joincode">
+                <input id="lbCode" placeholder="방 코드" maxlength="4" autocomplete="off" spellcheck="false">
+                <button type="submit" class="lb-btn lb-btn-amber">입장</button>
+              </form>
               <button id="lbMake" class="lb-btn lb-btn-green">＋ 방 만들기</button>
             </div>
             <div class="lb-table-wrap">
@@ -151,6 +161,21 @@ export class LobbyScene extends Phaser.Scene {
       this.creating = true;
       this.createType = this.games[0]?.type ?? '';
       this.renderModal();
+    });
+    // 코드로 입장 — 4자리 방 코드 직접 입력 (성공 시 서버가 'state' push → 방 진입, 실패는 placeholder로 안내)
+    this.$('lbJoinForm')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = this.$('lbCode') as HTMLInputElement | null;
+      const code = input?.value.trim().toUpperCase() ?? '';
+      if (!code) return;
+      this.socket.emit('joinRoom', { code }, (res?: { ok: boolean; error?: string }) => {
+        if (input) input.value = '';
+        if (res && !res.ok && input) input.placeholder = res.error ?? '입장 실패';
+      });
+    });
+    this.$('lbCode')?.addEventListener('input', (e) => {
+      const t = e.target as HTMLInputElement;
+      t.value = t.value.toUpperCase();
     });
     this.$('lbShop')?.addEventListener('click', () => this.scene.start('shop'));
     this.$('lbDressRoom')?.addEventListener('click', () => this.scene.start('dress'));
@@ -259,27 +284,36 @@ export class LobbyScene extends Phaser.Scene {
     this.dom.setPosition(this.scale.width / 2, this.scale.height / 2);
   }
 
-  // 방 만들기 — 게임 카탈로그 (키비주얼 카드에서 선택)
+  // 방 만들기 — 게임 카탈로그. 3열×2행(6개)을 한 페이지로, 게임이 늘면 페이지를 추가(점/화살표/스와이프).
   private createRoomHtml() {
-    const cards = this.games
-      .map(
-        (g) => `
+    const PER_PAGE = 6;
+    const card = (g: { type: string; label: string; minPlayers: number; maxPlayers: number }) => `
         <div class="gc-card ${this.createType === g.type ? 'sel' : ''}" data-type="${g.type}">
-          <div class="gc-img"><img src="/games/${g.type}.png" alt="" draggable="false" onerror="this.parentElement.classList.add('noimg')"></div>
+          <div class="gc-img"><img src="/games/${g.type}.png" alt="" draggable="false" onerror="if(!this.dataset.svg){this.dataset.svg='1';this.src='/games/${g.type}.svg';}else{this.parentElement.classList.add('noimg');}"></div>
           <div class="gc-info">
             <b>${this.esc(g.label)}</b>
             <small>${this.esc(GAME_DESC[g.type] ?? '')}</small>
             <span class="gc-players">👥 ${g.minPlayers}~${g.maxPlayers}명</span>
           </div>
           <span class="gc-check">✔</span>
-        </div>`
-      )
-      .join('');
+        </div>`;
+    const pageCount = Math.max(1, Math.ceil(this.games.length / PER_PAGE));
+    const pages = Array.from({ length: pageCount }, (_, i) =>
+      `<div class="gc-page">${this.games.slice(i * PER_PAGE, i * PER_PAGE + PER_PAGE).map(card).join('')}</div>`
+    ).join('');
+    const multi = pageCount > 1;
+    const nav = multi
+      ? `<button class="gc-nav gc-prev" id="gcPrev" aria-label="이전" style="visibility:hidden">‹</button><button class="gc-nav gc-next" id="gcNext" aria-label="다음">›</button>`
+      : '';
+    const dots = multi
+      ? `<div class="gc-dots">${Array.from({ length: pageCount }, (_, i) => `<button class="gc-dot${i === 0 ? ' on' : ''}" data-page="${i}" aria-label="${i + 1}페이지"></button>`).join('')}</div>`
+      : '';
     return `
       <div class="modal-bg" id="mBg">
         <div class="mini-panel gamecat-panel">
           <header class="dx-head"><b>🎮 방 만들기</b><span class="dx-sub">어떤 게임으로 모일까요?</span><button id="mCancel" class="dx-close">✕</button></header>
-          <div class="gc-grid">${cards}</div>
+          <div class="gc-railwrap">${nav}<div class="gc-pages" id="gcPages">${pages}</div></div>
+          ${dots}
           <footer class="dx-foot gc-foot">
             <input id="cTitle" placeholder="방 제목 (선택)" maxlength="30">
             <button id="cMake" class="lb-btn lb-btn-green">이 게임으로 방 만들기</button>
@@ -523,6 +557,31 @@ export class LobbyScene extends Phaser.Scene {
       this.socket.emit('createRoom', { type: this.createType, title });
       close();
     });
+
+    // 카탈로그 페이지네이션 — 점/화살표/휠/스와이프로 페이지 이동
+    const pages = host.querySelector('#gcPages') as HTMLElement | null;
+    if (pages && pages.children.length > 1) {
+      const dotEls = [...host.querySelectorAll('.gc-dot')] as HTMLElement[];
+      const prev = host.querySelector('#gcPrev') as HTMLElement | null;
+      const next = host.querySelector('#gcNext') as HTMLElement | null;
+      const last = pages.children.length - 1;
+      const cur = () => (pages.clientWidth ? Math.round(pages.scrollLeft / pages.clientWidth) : 0);
+      const sync = () => {
+        const p = cur();
+        dotEls.forEach((d, i) => d.classList.toggle('on', i === p));
+        if (prev) prev.style.visibility = p <= 0 ? 'hidden' : 'visible';
+        if (next) next.style.visibility = p >= last ? 'hidden' : 'visible';
+      };
+      const go = (p: number) => pages.scrollTo({ left: Math.max(0, Math.min(last, p)) * pages.clientWidth, behavior: 'smooth' });
+      pages.addEventListener('scroll', sync);
+      dotEls.forEach((d) => d.addEventListener('click', () => go(Number(d.dataset.page))));
+      prev?.addEventListener('click', () => go(cur() - 1));
+      next?.addEventListener('click', () => go(cur() + 1));
+      pages.addEventListener('wheel', (e) => {
+        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { pages.scrollLeft += e.deltaY; e.preventDefault(); }
+      }, { passive: false });
+      setTimeout(sync, 0);
+    }
 
     // 프로필 카드의 친구 요청 버튼
     const pAdd = host.querySelector('#pAddFr') as HTMLButtonElement | null;

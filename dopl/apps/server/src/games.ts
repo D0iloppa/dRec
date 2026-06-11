@@ -5,6 +5,12 @@ import { oxQuizPackage } from '@dopl/game-ox-quiz';
 import { commonQuizPackage } from '@dopl/game-common-quiz';
 import { speedQuizPackage } from '@dopl/game-speed-quiz';
 import { mafiaPackage } from '@dopl/game-mafia';
+import { bangPackage } from '@dopl/game-bang';
+import { splendorPackage } from '@dopl/game-splendor';
+import { liarPackage } from '@dopl/game-liar';
+import { onecardPackage } from '@dopl/game-onecard';
+import { pokerPackage } from '@dopl/game-poker';
+import { puyoPackage } from '@dopl/game-puyo';
 import { pool } from './db.js';
 
 export const registry: Record<string, GamePackage> = {
@@ -12,6 +18,12 @@ export const registry: Record<string, GamePackage> = {
   [commonQuizPackage.meta.type]: commonQuizPackage,
   [speedQuizPackage.meta.type]: speedQuizPackage,
   [mafiaPackage.meta.type]: mafiaPackage,
+  [bangPackage.meta.type]: bangPackage,
+  [splendorPackage.meta.type]: splendorPackage,
+  [liarPackage.meta.type]: liarPackage,
+  [onecardPackage.meta.type]: onecardPackage,
+  [pokerPackage.meta.type]: pokerPackage,
+  [puyoPackage.meta.type]: puyoPackage,
 };
 
 export const gameList = Object.values(registry).map((g) => g.meta);

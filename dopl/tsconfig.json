@@ -7,6 +7,12 @@
     { "path": "packages/games/common-quiz" },
     { "path": "packages/games/speed-quiz" },
     { "path": "packages/games/mafia" },
+    { "path": "packages/games/bang" },
+    { "path": "packages/games/splendor" },
+    { "path": "packages/games/liar" },
+    { "path": "packages/games/onecard" },
+    { "path": "packages/games/poker" },
+    { "path": "packages/games/puyo" },
     { "path": "apps/server" }
   ]
 }

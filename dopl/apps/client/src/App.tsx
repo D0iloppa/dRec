@@ -10,6 +10,7 @@ void loadBgmMeta();
 import PhaserLogin from './ui/PhaserLogin';
 import PhaserLobby from './ui/PhaserLobby';
 import PhaserRoom from './ui/PhaserRoom';
+import AdBar from './ui/AdBar';
 
 export default function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('dopl-token'));
@@ -54,7 +55,13 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room?.phase]);
 
-  if (!token) return <PhaserLogin onAuth={setToken} />;
+  // 광고는 정적 화면(로그인·로비)에만 — 게임 진행(room)·로딩 화면엔 미게재.
+  if (!token) return (
+    <div className="dopl-shell">
+      <PhaserLogin onAuth={setToken} />
+      <AdBar />
+    </div>
+  );
   if (!profile || !socket) return <main className="app"><p className="muted">로딩 중…</p></main>;
   if (room) {
     return (
@@ -69,13 +76,16 @@ export default function App() {
     );
   }
   return (
-    <PhaserLobby
-      socket={socket}
-      games={games}
-      profile={profile}
-      token={token}
-      onLogout={logout}
-      refreshProfile={() => api.getProfile(token).then(setProfile).catch(() => {})}
-    />
+    <div className="dopl-shell">
+      <PhaserLobby
+        socket={socket}
+        games={games}
+        profile={profile}
+        token={token}
+        onLogout={logout}
+        refreshProfile={() => api.getProfile(token).then(setProfile).catch(() => {})}
+      />
+      <AdBar />
+    </div>
   );
 }

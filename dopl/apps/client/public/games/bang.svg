@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">
+  <rect width="160" height="160" rx="16" fill="#3b2412"/>
+  <rect x="10" y="10" width="140" height="140" rx="12" fill="#5a3a1e" stroke="#b8862f" stroke-width="3"/>
+  <circle cx="80" cy="70" r="40" fill="#d9a441"/>
+  <circle cx="80" cy="70" r="40" fill="none" stroke="#7a4a18" stroke-width="3"/>
+  <text x="80" y="62" font-family="Georgia, serif" font-size="34" fill="#3b2412" text-anchor="middle">🤠</text>
+  <text x="80" y="135" font-family="Georgia, serif" font-size="30" font-weight="bold" fill="#ffe9b0" text-anchor="middle">BANG!</text>
+</svg>
