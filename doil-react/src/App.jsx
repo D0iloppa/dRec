@@ -9,6 +9,27 @@ import {
 import { RiBookmarkLine } from 'react-icons/ri';
 import './App.css';
 
+// Google AdSense — 페이지 최하단 광고. 콘솔에서 만든 디스플레이 유닛의 data-ad-slot 숫자를 넣으면 켜짐.
+// 빈 값이면 렌더하지 않음. 로더 스크립트는 index.html <head> 에 있음.
+const ADSENSE_CLIENT = 'ca-pub-4322659154168202';
+const ADSENSE_SLOT = '3606107040';
+
+function AdUnit() {
+  useEffect(() => {
+    if (!ADSENSE_SLOT) return;
+    try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch { /* 로더 미로드 */ }
+  }, []);
+  if (!ADSENSE_SLOT) return null;
+  return (
+    <ins className="adsbygoogle"
+      style={{ display: 'block', margin: '14px auto' }}
+      data-ad-client={ADSENSE_CLIENT}
+      data-ad-slot={ADSENSE_SLOT}
+      data-ad-format="auto"
+      data-full-width-responsive="true" />
+  );
+}
+
 const SERVICES = [
   {
     icon: '🎮',
@@ -195,6 +216,44 @@ function useTypewriter(texts, { typeSpeed = 55, deleteSpeed = 30, pauseMs = 2000
   return display;
 }
 
+function DoilTimesSection() {
+  // null=로딩, []=발행물 없음, [...]=목록
+  const [posts, setPosts] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/times/posts.json', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => { if (!cancelled) setPosts(Array.isArray(d) ? d.slice(0, 4) : []); })
+      .catch(() => { if (!cancelled) setPosts([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  return (
+    <div className="container" style={{ marginBottom: '2.5rem' }}>
+      <div className="sectionHeader">
+        <h2>📰 DoilTimes</h2>
+        <p>AI가 매일 뉴스를 요약·논평하는 자동 브리핑 신문. <a href="/times/">전체 보기 →</a></p>
+      </div>
+
+      {posts === null ? (
+        <p style={{ opacity: 0.6 }}>불러오는 중…</p>
+      ) : posts.length === 0 ? (
+        <p style={{ opacity: 0.6 }}>아직 발행된 글이 없습니다.</p>
+      ) : (
+        <div className="serviceGrid">
+          {posts.map((p) => (
+            <a key={p.url} href={p.url} className="serviceCard" target="_blank" rel="noreferrer">
+              <div className="serviceCardTitle">{p.date}</div>
+              <div className="serviceCardDesc">DoilTimes {p.edition}</div>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function HeroSection() {
   const subtitle = useTypewriter(HERO_SUBTITLES);
 
@@ -278,6 +337,8 @@ function App() {
       <HeroSection />
 
       <main className="main-content">
+        <DoilTimesSection />
+
         <div className="container">
           <div className="sectionHeader">
             <h2>✅ 서비스 일람</h2>
@@ -293,7 +354,8 @@ function App() {
 
       <footer>
         <div className="container">
-          <p>© 2026 D0il. Powered by Nginx Gateway.</p>
+          <AdUnit />
+          <p>© 2026 D0il. Powered by Nginx Gateway. · <a href="/times/privacy.html">개인정보처리방침</a></p>
         </div>
       </footer>
     </div>
