@@ -57,15 +57,16 @@ cd agent/sourcingsearcher
 - 의존성: 파이썬 표준 + `psycopg2`(agent_db) + `claude` CLI + `@playwright/mcp`(npx 자동) + 로컬 `playwright`(login.mjs 용).
 - 발신: `agent@doil.me` (postfix, DKIM 서명). 인증 계정은 루트 `.env` 의 `POSTFIX_SASL_USERS`.
 
-## 3) cron 등록 (1시간 간격)
+## 3) cron 등록 (2시간 간격)
 
 ```bash
 crontab -e
 ```
 
 ```cron
-# 매시 정각 — SourcingSearcher 영업대상 발굴
-0 * * * * /mnt/c/DEV/docker/agent/sourcingsearcher/run.sh >> /mnt/c/DEV/docker/agent/sourcingsearcher/state/cron.log 2>&1
+# 2시간 간격 — SourcingSearcher 영업대상 발굴
+# 로그는 '>' (덮어쓰기) — '>>' 면 비대해진다. 마지막 실행분만 남긴다.
+0 */2 * * * /mnt/c/DEV/docker/agent/sourcingsearcher/run.sh > /mnt/c/DEV/docker/agent/sourcingsearcher/state/cron.log 2>&1
 ```
 
 > **비용 주의:** 매시간 LLM 이 여러 사이트를 브라우징·판단하므로 회당 토큰이 적지 않다.
