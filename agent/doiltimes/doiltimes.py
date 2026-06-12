@@ -194,35 +194,132 @@ __ARTICLES_JSON__
 """
 
 
-def _claude_json(prompt: str, label: str) -> dict:
-    """claude 를 호출해 JSON 객체 하나를 받아 파싱. 하트비트 로그 + 데드로그."""
-    log(f"Claude 호출 — 모델 {MODEL}, {label} (타임아웃 없음, 끝까지 대기)")
-    proc = subprocess.Popen(
-        ["claude", "-p", "--model", MODEL, "--output-format", "text"],
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        text=True, cwd=BASE,
-    )
-    start = time.monotonic()
-    pending_input = prompt
-    while True:
-        try:
-            stdout, stderr = proc.communicate(input=pending_input, timeout=HEARTBEAT)
+# 프로세스 자체가 죽거나 빈 출력일 때만 재호출(살릴 게 없으므로). 깨진 JSON 은 재호출이 아니라 로컬 복구로 처리.
+PROC_RETRIES = 2
+
+
+def _claude_raw(prompt: str, label: str) -> str:
+    """claude 를 호출해 원문(text)을 반환. 프로세스 실패/빈 출력일 때만 제한적 재호출. 하트비트 로그."""
+    for attempt in range(1, PROC_RETRIES + 1):
+        tag = label if attempt == 1 else f"{label} (재호출 {attempt}/{PROC_RETRIES})"
+        log(f"Claude 호출 — 모델 {MODEL}, {tag} (타임아웃 없음, 끝까지 대기)")
+        proc = subprocess.Popen(
+            ["claude", "-p", "--model", MODEL, "--output-format", "text"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, cwd=BASE,
+        )
+        start = time.monotonic()
+        pending_input = prompt
+        while True:
+            try:
+                stdout, stderr = proc.communicate(input=pending_input, timeout=HEARTBEAT)
+                break
+            except subprocess.TimeoutExpired:
+                pending_input = None
+                log(f"  … 생성 중 ({int(time.monotonic() - start)}초 경과)")
+        elapsed = int(time.monotonic() - start)
+        if proc.returncode == 0 and stdout.strip():
+            log(f"생성 완료 — 소요 {elapsed}초")
+            return stdout
+        log(f"  ⚠ claude 실패(exit {proc.returncode}, {elapsed}초, 출력 {len(stdout.strip())}자): "
+            f"{(stderr or '').strip()[:300] or '(stderr 없음)'}")
+    return ""
+
+
+def _save_raw(raw: str, edition: str) -> Path:
+    """AI 원문을 항상 파일로 보존 — 파싱 실패 시 사후 분석·수동 복구용 (타임스탬프로 덮어쓰기 방지)."""
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    p = OUTPUT_DIR / f"raw_{datetime.now(KST):%Y%m%d_%H%M}_{edition}.txt"
+    p.write_text(raw, encoding="utf-8")
+    return p
+
+
+def _scan_object(s: str, start: int) -> tuple[str | None, int]:
+    """s[start]='{' 부터 균형 맞는 객체를 스캔(문자열/이스케이프 고려). 끝까지 안 닫히면(=끊김) (None, len)."""
+    depth = 0
+    in_str = esc = False
+    for k in range(start, len(s)):
+        c = s[k]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+        elif c == '"':
+            in_str = True
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return s[start:k + 1], k + 1
+    return None, len(s)
+
+
+def _salvage_articles(span: str) -> dict | None:
+    """깨진/끊긴 JSON 에서 articles 배열의 '완성된 기사 객체'만 회수.
+    끊김 → 마지막 미완성 건 버림, 중간 한 건만 깨짐 → 그 건만 스킵. (전체 재요청 없이 로컬 복구)"""
+    i = span.find('"articles"')
+    if i == -1:
+        return None
+    lb = span.find("[", i)
+    if lb == -1:
+        return None
+    arts: list[dict] = []
+    j, n = lb + 1, len(span)
+    while j < n:
+        while j < n and span[j] not in "{]":
+            j += 1
+        if j >= n or span[j] == "]":
             break
-        except subprocess.TimeoutExpired:
-            pending_input = None
-            log(f"  … 생성 중 ({int(time.monotonic() - start)}초 경과)")
-    elapsed = int(time.monotonic() - start)
-    if proc.returncode != 0:
-        sys.exit(f"[데드로그] claude 실행 실패 (exit {proc.returncode}, {elapsed}초): "
-                 f"{(stderr or '').strip()[:500] or '(stderr 없음)'}")
-    log(f"생성 완료 — 소요 {elapsed}초")
-    m = re.search(r"\{.*\}", stdout, re.DOTALL)   # 본문 중 JSON 객체만 추출
-    if not m:
-        sys.exit(f"[데드로그] JSON 객체를 못 찾음. 원문 앞부분: {stdout[:300]}")
-    try:
-        return json.loads(m.group(0))
-    except json.JSONDecodeError as e:
-        sys.exit(f"[데드로그] JSON 파싱 실패: {e}\n원문: {stdout[:400]}")
+        obj, end = _scan_object(span, j)
+        if obj is None:            # 마지막 객체가 끊김 → 중단
+            break
+        try:
+            arts.append(json.loads(obj, strict=False))
+        except json.JSONDecodeError:
+            pass                   # 이 한 건만 버리고 계속
+        j = end
+    if not arts:
+        return None
+    out: dict = {"articles": arts}
+    cm = re.search(r'"column"\s*:\s*(\{.*?\})', span, re.DOTALL)   # column 도 가능하면 회수
+    if cm:
+        try:
+            out["column"] = json.loads(cm.group(1), strict=False)
+        except json.JSONDecodeError:
+            pass
+    return out
+
+
+def _parse_news_json(raw: str) -> tuple[dict | None, str]:
+    """원문 → 뉴스 JSON. 단계: (1) 정상 (2) strict=False (3) 부분 회수. 어떤 경로였는지 함께 반환."""
+    text = raw.strip()
+    if "```" in text:                                       # 코드펜스 제거
+        fm = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
+        if fm:
+            text = fm.group(1).strip()
+    start = text.find("{")
+    if start == -1:
+        return None, "JSON 객체 없음"
+    last = text.rfind("}")
+    if last > start:                                        # 닫힘이 있으면 통째 파싱 시도
+        closed = text[start:last + 1]
+        try:
+            return json.loads(closed), "정상"
+        except json.JSONDecodeError:
+            pass
+        try:
+            # strict=False: 문자열 내 제어문자(개행 등) 허용 → 사소한 깨짐 흡수
+            return json.loads(closed, strict=False), "strict=False 복구"
+        except json.JSONDecodeError:
+            pass
+    salv = _salvage_articles(text[start:])                  # 끊김/단일 깨짐 → 부분 회수
+    if salv and salv.get("articles"):
+        return salv, f"부분 회수({len(salv['articles'])}건)"
+    return None, "복구 불가"
 
 
 def generate_html(articles: list[dict], date_str: str, edition: str) -> str:
@@ -230,8 +327,19 @@ def generate_html(articles: list[dict], date_str: str, edition: str) -> str:
     prompt = (PROMPT_TEMPLATE
               .replace("{edition}", edition)
               .replace("__ARTICLES_JSON__", json.dumps(articles, ensure_ascii=False, indent=1)))
-    data = _claude_json(prompt, f"기사 {len(articles)}건")
-    return render_news_html(data, date_str, edition)
+    raw = _claude_raw(prompt, f"기사 {len(articles)}건")
+    if raw.strip():
+        rawpath = _save_raw(raw, edition)                   # 원문 항상 보존(사후 복구용)
+        data, mode = _parse_news_json(raw)
+        if data and data.get("articles"):
+            if mode != "정상":
+                log(f"  ⚠ JSON 폴백 적용: {mode} (원문 보존: {rawpath})")
+            return render_news_html(data, date_str, edition)
+        log(f"  ⚠ AI JSON 복구 불가({mode}) → 비-AI 폴백판 발행. 원문 보존: {rawpath}")
+    else:
+        log("  ⚠ Claude 출력 없음 → 비-AI 폴백판 발행")
+    # 최종 폴백: 발행 누락(빈 신문/메일 0통)보다 스크랩 헤드라인만이라도 신문으로 내보낸다
+    return fallback_html(articles, date_str, edition)
 
 
 def render_news_html(data: dict, date_str: str, edition: str) -> str:
@@ -462,11 +570,12 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="DoilTimes 발행 에이전트")
     ap.add_argument("--no-ai", action="store_true", help="AI 생성 생략 (배선 테스트, 토큰 0)")
     ap.add_argument("--no-mail", action="store_true", help="메일 발송 생략 (HTML 발행까지만)")
+    ap.add_argument("--edition", choices=["조간", "석간"], help="판 강제 지정 (미지정 시 실행 시각으로 자동 판정 — 누락 판 백필용)")
     args = ap.parse_args()
 
     env = load_env()
     now = datetime.now(KST)
-    edition = "조간" if now.hour < 12 else "석간"   # 정오 기준: 오전=조간, 오후=석간
+    edition = args.edition or ("조간" if now.hour < 12 else "석간")   # 정오 기준: 오전=조간, 오후=석간
     date_str = f"{now:%Y년 %m월 %d일} ({'월화수목금토일'[now.weekday()]})"
     log(f"{edition} 발행 시작 — {date_str}")
 
