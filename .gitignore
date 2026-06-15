@@ -67,3 +67,6 @@ couchdb/local.ini
 # 파이썬 캐시 / playwright 세션 로그
 __pycache__/
 agent/*/.playwright-mcp/
+
+# Can I Eat — 별도 repo로 분리된 독립 프로젝트 (서브모듈 아님)
+cie/
