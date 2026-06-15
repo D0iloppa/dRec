@@ -322,6 +322,41 @@ def _parse_news_json(raw: str) -> tuple[dict | None, str]:
     return None, "복구 불가"
 
 
+HEADLINE_PROMPT = """\
+아래는 발행한 신문 한 호의 본문이다. 이를 종합해 그날의 흐름을 대표하는
+1면 머리기사형 한국어 헤드라인 한 줄을 만들어라.
+- 20자 내외, 제목용 명사구. 따옴표·마침표·부연 없이 헤드라인 문구만 한 줄로 출력.
+
+신문 본문:
+__SOURCE__
+"""
+
+
+def _synthesize_headline(source: str, label: str) -> str:
+    """본문 텍스트를 소스로 claude 를 호출해 한 줄 헤드라인을 합성. 실패 시 빈 문자열."""
+    if not source.strip():
+        return ""
+    raw = _claude_raw(HEADLINE_PROMPT.replace("__SOURCE__", source), label)
+    if not raw.strip():
+        return ""
+    line = raw.strip().splitlines()[0].strip()
+    return line.strip('"').strip("'").strip()[:60]
+
+
+def generate_headline(data: dict) -> str:
+    """발행 본문(한국어 제목 + 칼럼)을 소스로 한 줄 헤드라인을 합성.
+    큰 생성 JSON 과 분리 — 부분 회수(절단)된 경우에도 안정적으로 뽑힌다.
+    실패하면 빈 문자열 → 호출부가 톱기사 제목으로 폴백."""
+    titles = "\n".join(
+        f"- {t}" for a in data.get("articles", [])
+        if (t := ((a.get("ko") or {}).get("title") or "").strip()))
+    if not titles:
+        return ""
+    column = (data.get("column") or {}).get("ko", "") or "(없음)"
+    source = f"기사 제목:\n{titles}\n\n편집장 칼럼:\n{column}"
+    return _synthesize_headline(source, "헤드라인 합성")
+
+
 def generate_html(articles: list[dict], date_str: str, edition: str) -> str:
     # .format() 은 JSON 스키마의 중괄호와 충돌하므로 literal replace 사용
     prompt = (PROMPT_TEMPLATE
@@ -334,7 +369,8 @@ def generate_html(articles: list[dict], date_str: str, edition: str) -> str:
         if data and data.get("articles"):
             if mode != "정상":
                 log(f"  ⚠ JSON 폴백 적용: {mode} (원문 보존: {rawpath})")
-            return render_news_html(data, date_str, edition)
+            headline = generate_headline(data)
+            return render_news_html(data, date_str, edition, headline)
         log(f"  ⚠ AI JSON 복구 불가({mode}) → 비-AI 폴백판 발행. 원문 보존: {rawpath}")
     else:
         log("  ⚠ Claude 출력 없음 → 비-AI 폴백판 발행")
@@ -342,7 +378,7 @@ def generate_html(articles: list[dict], date_str: str, edition: str) -> str:
     return fallback_html(articles, date_str, edition)
 
 
-def render_news_html(data: dict, date_str: str, edition: str) -> str:
+def render_news_html(data: dict, date_str: str, edition: str, headline: str = "") -> str:
     """Claude 가 만든 콘텐츠(JSON)에 HTML 구조와 .en/.ko/.kx class 를 입힌다.
     class 는 파이썬이 보장하므로 언어 탭 토글이 항상 정확히 동작한다."""
     def esc(s):
@@ -401,8 +437,18 @@ def render_news_html(data: dict, date_str: str, edition: str) -> str:
     titles = [esc((a.get("en") or {}).get("title", "")) for a in data.get("articles", [])][:6]
     ticker = " &nbsp;·&nbsp; ".join(" ".join(t.split()[:6]) for t in titles if t)
 
+    # 목록(/times/ 인덱스)용 헤드라인 — 합성 결과(generate_headline) 우선, 없으면 톱기사 한국어 제목으로 폴백.
+    # rebuild_index 가 발행 HTML 에서 회수하므로 head 메타로 영구 보존한다.
+    headline = (headline or "").strip()
+    if not headline:
+        for a in data.get("articles", []):
+            if a.get("is_top"):
+                headline = ((a.get("ko") or {}).get("title") or "").strip()
+                break
+
     return f"""<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="dt:headline" content="{esc(headline)}">
 <title>DoilTimes {edition} — {date_str}</title></head>
 <body style="margin:0;background:#f4f1ea;font-family:{SERIF};color:#1a1a1a">
 <div style="max-width:680px;margin:auto;background:#f4f1ea">
@@ -498,6 +544,64 @@ def publish_web(html: str, now: datetime, edition: str, env: dict, target: Path)
     return f"{SITE_URL}/{fname}"
 
 
+DT_HEADLINE_RE = re.compile(r'<meta name="dt:headline" content="([^"]*)">')
+
+
+def _read_headline(path: Path) -> str:
+    """발행 HTML 의 dt:headline 메타를 회수. 없으면 빈 문자열(구판/비-AI 폴백판)."""
+    try:
+        head = path.read_text(encoding="utf-8")[:4000]   # 메타는 <head> 안 — 앞부분만 읽음
+    except OSError:
+        return ""
+    m = DT_HEADLINE_RE.search(head)
+    return htmllib.unescape(m.group(1)).strip() if m else ""
+
+
+def _html_to_text(html: str) -> str:
+    """발행 HTML → 헤드라인 합성용 평문. script/style 제거 후 태그를 벗긴다."""
+    s = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html, flags=re.DOTALL | re.IGNORECASE)
+    s = re.sub(r"<[^>]+>", " ", s)
+    return re.sub(r"\s+", " ", htmllib.unescape(s)).strip()
+
+
+def backfill_headline(path: Path) -> str:
+    """발행 HTML 본문으로 헤드라인을 합성해 dt:headline 메타에 반영(주입/교체). 합성된 헤드라인 반환.
+    head 가 없는 폴백판은 건너뛴다(빈 문자열)."""
+    html = path.read_text(encoding="utf-8")
+    headline = _synthesize_headline(_html_to_text(html)[:6000], f"헤드라인 합성 {path.name}")
+    if not headline:
+        return ""
+    meta = f'<meta name="dt:headline" content="{htmllib.escape(headline)}">'
+    if DT_HEADLINE_RE.search(html):
+        html = DT_HEADLINE_RE.sub(meta, html, count=1)
+    elif "</head>" in html:
+        html = html.replace("</head>", meta + "</head>", 1)
+    else:
+        return ""                       # head 없음(폴백판) → 메타 주입 불가
+    path.write_text(html, encoding="utf-8")
+    return headline
+
+
+def run_gen_title(env: dict) -> None:
+    """발행된 HTML 중 헤드라인이 없는 호에 본문 기반 헤드라인을 백필하고 인덱스를 재생성한다.
+    기존 발행물(과거 호) 마이그레이션용 — 스크래핑/발행/메일 없음."""
+    files = sorted(PUBLISH_DIR.glob("20*_*.html"), reverse=True)
+    done = skipped = failed = 0
+    for p in files:
+        if _read_headline(p):                  # 이미 보유 → 토큰 절약 위해 건너뜀
+            skipped += 1
+            continue
+        h = backfill_headline(p)
+        if h:
+            log(f"헤드라인 백필: {p.name} → {h}")
+            done += 1
+        else:
+            log(f"  ⚠ 백필 실패/건너뜀(폴백판?): {p.name}")
+            failed += 1
+    log(f"백필 완료 — 신규 {done}건, 기존 보유 {skipped}건, 실패 {failed}건")
+    rebuild_index(env)
+
+
 def rebuild_index(env: dict) -> None:
     """발행된 날짜별 글을 모아 /times/ 인덱스 페이지 + posts.json 매니페스트 재생성.
     보관기간(RETENTION_DAYS) 초과 발행물은 먼저 삭제한다 (디스크 보호)."""
@@ -507,17 +611,18 @@ def rebuild_index(env: dict) -> None:
             p.unlink(missing_ok=True)
             log(f"보관기간 초과 삭제: {p.name}")
     posts = sorted(PUBLISH_DIR.glob("20*_*.html"), reverse=True)
-    # 매니페스트 (홈페이지 DoilTimes 섹션이 fetch) — 최신순
+    # 매니페스트 (홈페이지 DoilTimes 섹션이 fetch) — 최신순. 헤드라인은 파일당 한 번만 회수.
     manifest = []
-    for p in posts:
-        date, _, ed = p.stem.partition("_")
-        manifest.append({"date": date, "edition": ed, "url": f"/times/{p.name}"})
-    (PUBLISH_DIR / "posts.json").write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
-
     items = ""
     for p in posts:
         date, _, ed = p.stem.partition("_")
-        items += f'<li style="margin:6px 0"><a href="/times/{p.name}" style="color:#1a1a1a">{date} · {ed}</a></li>'
+        headline = _read_headline(p)
+        manifest.append({"date": date, "edition": ed, "url": f"/times/{p.name}", "headline": headline})
+        head_html = (f' <span style="color:#888">— {htmllib.escape(headline)}</span>'
+                     if headline else "")
+        items += (f'<li style="margin:6px 0"><a href="/times/{p.name}" '
+                  f'style="color:#1a1a1a">{date} · {ed}</a>{head_html}</li>')
+    (PUBLISH_DIR / "posts.json").write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
     html = f"""<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>DoilTimes — AI 뉴스 브리핑</title>
@@ -570,10 +675,18 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="DoilTimes 발행 에이전트")
     ap.add_argument("--no-ai", action="store_true", help="AI 생성 생략 (배선 테스트, 토큰 0)")
     ap.add_argument("--no-mail", action="store_true", help="메일 발송 생략 (HTML 발행까지만)")
+    ap.add_argument("--gen-title", action="store_true",
+                    help="발행된 HTML 본문으로 헤드라인을 백필 (과거 호 마이그레이션). 스크래핑/발행/메일 없음")
     ap.add_argument("--edition", choices=["조간", "석간"], help="판 강제 지정 (미지정 시 실행 시각으로 자동 판정 — 누락 판 백필용)")
     args = ap.parse_args()
 
     env = load_env()
+
+    if args.gen_title:                       # 마이그레이션 모드 — 발행/메일 없이 헤드라인만 백필
+        log("헤드라인 백필 모드 (--gen-title)")
+        run_gen_title(env)
+        return
+
     now = datetime.now(KST)
     edition = args.edition or ("조간" if now.hour < 12 else "석간")   # 정오 기준: 오전=조간, 오후=석간
     date_str = f"{now:%Y년 %m월 %d일} ({'월화수목금토일'[now.weekday()]})"
