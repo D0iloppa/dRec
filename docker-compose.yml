@@ -94,7 +94,11 @@ services:
       - dev_db_data:/var/lib/postgresql/data
       - ./dev_db/init:/docker-entrypoint-initdb.d
     networks:
-      - dev-net
+      dev-net:
+        # `db` 별칭이 ohno_db 와 dev-net 에서 충돌(라운드로빈 → 간헐 인증실패)하므로
+        # 우리 db 전용 고유 별칭을 둔다. 소비자는 DB_HOST=devdb 로 붙으면 항상 이 db.
+        aliases:
+          - devdb
 
   # doil-sb BFF (Express). prod: 소스를 이미지에 굽고 node로 직접 실행.
   # 개발 핫리로드는 docker-compose.dev.yml 오버라이드 참고.
@@ -107,7 +111,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - DB_HOST=db
+      - DB_HOST=devdb   # dev-net `db` 별칭 충돌(ohno_db) 회피용 우리 db 전용 별칭
       - DB_PORT=5432
       - DB_USER=doil
       - DB_PASSWORD=doildev1!

@@ -40,6 +40,14 @@ const SERVICES = [
     badgeLabel: 'Public',
   },
   {
+    icon: '🍽️',
+    title: 'Can I Eat?',
+    desc: '간헐적 단식 코치 — "지금 먹어도 돼?"를 AI가 판단.',
+    href: 'https://cie.doil.me/',
+    badge: 'public',
+    badgeLabel: 'Public',
+  },
+  {
     icon: '🐳',
     title: 'SandBox Page',
     desc: '테스트 및 샌드박스 환경 페이지입니다.',

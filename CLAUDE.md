@@ -65,6 +65,7 @@ External subdomains:
   ohno.doil.me      → host.docker.internal:18080 (FastAPI)
   blog.doil.me      → Naver Blog redirect
   plane.doil.me     → Plane CE (project management, separate compose)
+  cie.doil.me       → cie:3000 (Can I Eat — 별도 repo, 자체 compose)
 ```
 
 All containers share the external Docker network `dev-net` (must be created separately before `docker compose up`).
@@ -79,7 +80,8 @@ All containers share the external Docker network `dev-net` (must be created sepa
 | doil-sb | doil-sb/ | Express.js | Sandbox + API gateway + MCP host |
 | mattermost | — | Mattermost Team | Messaging (`/mm/`), uses `db` |
 | plane | — | Plane CE | Project management (`/plane/`) |
-| db | dev_db/ | PostgreSQL | Main dev DB (`dev` + `mattermost` dbs, user: `doil`) |
+| db | dev_db/ | PostgreSQL | 공유 dev DB. 프로젝트별 database (`dev`, `cie`, `mattermost`), user: `doil`. dev-net 별칭 `devdb` (소비자는 `DB_HOST=devdb`) |
+| cie | cie/ | React+Vite / Express / PG | **별도 repo**(`github.com/D0iloppa/cie`, gitignore). 자체 compose 로 dev-net 구동, `cie.doil.me`. AI=claude CLI+OAuth 토큰. database `cie` |
 
 ## Common Commands
 
