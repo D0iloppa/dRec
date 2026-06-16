@@ -1,0 +1,26 @@
+# GPU whisper 서버 컨테이너 — 원격 GPU PC(예: 192.168.0.14)에서 실행.
+# Docker Desktop(WSL2 백엔드) + Windows NVIDIA 드라이버만 있으면 된다(WSL 수작업 불필요).
+#
+# 빌드/기동 (그 PC에서):
+#   docker build -f Dockerfile.whisper -t drec-whisper .
+#   docker run --gpus all -p 9000:9000 -v whisper_models:/root/.cache drec-whisper
+# 확인:  curl http://localhost:9000/health
+# dRec 쪽:  DREC_WHISPER_REMOTE_URL=http://192.168.0.14:9000/transcribe
+#
+# 주의: CTranslate2(faster-whisper) 버전과 CUDA/cuDNN 호환이 맞아야 한다.
+#  아래는 CUDA 12 + cuDNN 런타임 기준. 버전 에러 시 베이스 이미지 태그를 조정.
+
+FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 python3-pip ffmpeg \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --no-cache-dir faster-whisper fastapi "uvicorn[standard]" python-multipart
+
+WORKDIR /app
+COPY whisper_server.py .
+
+ENV WHISPER_MODEL=large-v3 WHISPER_DEVICE=cuda WHISPER_COMPUTE=float16
+EXPOSE 9000
+CMD ["uvicorn", "whisper_server:app", "--host", "0.0.0.0", "--port", "9000"]
