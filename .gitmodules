@@ -1,0 +1,3 @@
+[submodule "dRec"]
+	path = dRec
+	url = https://github.com/D0iloppa/dRec.git
