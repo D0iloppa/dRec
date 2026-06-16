@@ -1,0 +1,34 @@
+# dRec — 독립 실행 compose. doil.me 게이트웨이와 같은 외부 네트워크(dev-net)에
+# 붙어, 게이트웨이 nginx 가 drec.doil.me → drec:8080 으로 프록시한다.
+# DB 는 공유 Postgres(devdb) 안의 전용 database `drec` 를 쓴다.
+#   사전: dev-net 존재 + 공유 db 컨테이너 가동 + database `drec` 1회 생성(README 참고)
+#   docker compose up -d --build
+services:
+  drec:
+    build: .
+    container_name: drec
+    environment:
+      - DB_HOST=devdb          # 공유 dev Postgres 의 dev-net 별칭(`db` 별칭 충돌 회피)
+      - DB_PORT=5432
+      - DB_USER=doil
+      - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD 를 .env 에 설정하세요}  # gitignore 된 .env 에서 주입
+      - DB_NAME=drec           # 이 프로젝트 전용 database
+      # 1단계 STT (faster-whisper)
+      - DREC_WHISPER_MODEL=${DREC_WHISPER_MODEL:-small}
+      - DREC_WHISPER_DEVICE=${DREC_WHISPER_DEVICE:-cpu}
+      - DREC_WHISPER_COMPUTE=${DREC_WHISPER_COMPUTE:-int8}
+      # 2단계 회의록 — claude CLI(Claude Code) OAuth 토큰 (`claude setup-token` 발급)
+      - DREC_CLAUDE_MODEL=${DREC_CLAUDE_MODEL:-claude-opus-4-8}
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
+    volumes:
+      - drec_models:/root/.cache   # Whisper 모델 캐시(재시작 시 재다운로드 방지)
+    networks:
+      - dev-net
+    restart: unless-stopped
+
+networks:
+  dev-net:
+    external: true
+
+volumes:
+  drec_models:
