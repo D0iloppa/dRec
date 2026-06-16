@@ -66,9 +66,14 @@ External subdomains:
   blog.doil.me      → Naver Blog redirect
   plane.doil.me     → Plane CE (project management, separate compose)
   cie.doil.me       → cie:3000 (Can I Eat — 별도 repo, 자체 compose)
+  drec.doil.me      → drec:8080 (dRec 회의록 — 별도 repo 서브모듈, 자체 compose)
 ```
 
 All containers share the external Docker network `dev-net` (must be created separately before `docker compose up`).
+
+## 신규 프로젝트 추가
+
+새 프로젝트를 이 스택에 붙일 때(Doness 보일러플레이트 클론 → git 해제 → 신규 repo + 서브모듈 → `<proj>.doil.me` 도메인 → dev-net/게이트웨이 연동 → claude CLI 연동)는 **반드시 [`ai-docs/new-project-bootstrap.md`](ai-docs/new-project-bootstrap.md) 절차를 따른다.** 선례: `cie/`, `dRec/`.
 
 ## Services
 
