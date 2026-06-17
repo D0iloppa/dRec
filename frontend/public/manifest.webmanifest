@@ -1,0 +1,16 @@
+{
+  "name": "dRec — 회의록",
+  "short_name": "dRec",
+  "description": "회의 녹음 → Whisper 전사 → AI 회의록",
+  "lang": "ko",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

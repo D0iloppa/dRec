@@ -21,6 +21,11 @@ MODEL_SIZE = os.environ.get("DREC_WHISPER_MODEL", "small")
 DEVICE = os.environ.get("DREC_WHISPER_DEVICE", "cpu")
 COMPUTE = os.environ.get("DREC_WHISPER_COMPUTE", "int8")
 
+# 화자 분리(diarization) 엔드포인트 — 원격 whisper 서버의 /diarize 로 유도(없으면 비활성).
+DIARIZE_URL = os.environ.get("DREC_WHISPER_DIARIZE_URL", "").strip() or (
+    REMOTE_URL.replace("/transcribe", "/diarize") if REMOTE_URL else ""
+)
+
 
 @lru_cache(maxsize=1)
 def _model():
@@ -49,3 +54,27 @@ def transcribe(audio_path: str, language: str = "ko") -> str:
     if REMOTE_URL:
         return _transcribe_remote(audio_path, language)
     return _transcribe_local(audio_path, language)
+
+
+def diarize(audio_path: str, language: str = "ko") -> dict:
+    """전체 오디오를 화자 분리 전사한다.
+
+    반환: `{"text": "[화자 A] …\\n[화자 B] …", "segments": [{start,end,speaker,text}, …]}`.
+      - text: 회의록/검색용(같은 화자 연속 구간 묶음)
+      - segments: 자막 싱킹용 구간별 절대 타임스탬프
+    원격 서버가 없거나 실패하면 RuntimeError(호출부가 일반 전사로 폴백).
+    """
+    if not DIARIZE_URL:
+        raise RuntimeError("diarization 비활성 (DREC_WHISPER_DIARIZE_URL 없음)")
+
+    import httpx
+
+    with open(audio_path, "rb") as f:
+        files = {"audio": (os.path.basename(audio_path), f, "application/octet-stream")}
+        resp = httpx.post(DIARIZE_URL, files=files, data={"language": language}, timeout=1800)
+    resp.raise_for_status()
+    data = resp.json()
+    text = (data.get("text") or "").strip()
+    if not text:
+        raise RuntimeError("diarization 결과가 비었습니다")
+    return {"text": text, "segments": data.get("segments") or []}

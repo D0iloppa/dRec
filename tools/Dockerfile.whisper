@@ -10,7 +10,8 @@
 # 주의: CTranslate2(faster-whisper) 버전과 CUDA/cuDNN 호환이 맞아야 한다.
 #  아래는 CUDA 12 + cuDNN 런타임 기준. 버전 에러 시 베이스 이미지 태그를 조정.
 
-FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04
+# CUDA 12.8 + cuDNN 9: RTX 50xx(Blackwell sm_120) 지원 + ctranslate2 4.5+(cuDNN 9) 요구 충족.
+FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 python3-pip ffmpeg \
@@ -18,9 +19,18 @@ RUN apt-get update \
 
 RUN pip3 install --no-cache-dir faster-whisper fastapi "uvicorn[standard]" python-multipart
 
+# 화자 분리(/diarize): pyannote.audio 3.1 + torch. 전사는 GPU(ctranslate2), 화자분리는 CPU torch
+# (Blackwell sm_120 GPU torch 빌드 이슈 회피). DIARIZE_DEVICE=cuda 로 바꾸려면 CUDA torch 필요.
+# 버전 핀 필수: pyannote 3.1 은 torchaudio.AudioMetaData 를 쓰므로 torchaudio<=2.1, 그에 맞춰 torch 2.1.2,
+# 그리고 torch 2.1 은 numpy<2 필요(최신 torchaudio/numpy2 조합은 import 실패).
+RUN pip3 install --no-cache-dir torch==2.1.2 torchaudio==2.1.2 --index-url https://download.pytorch.org/whl/cpu \
+ && pip3 install --no-cache-dir "pyannote.audio==3.1.1" \
+ && pip3 install --no-cache-dir "numpy<2" "huggingface_hub==0.25.2" matplotlib
+
 WORKDIR /app
 COPY whisper_server.py .
 
-ENV WHISPER_MODEL=large-v3 WHISPER_DEVICE=cuda WHISPER_COMPUTE=float16
+ENV WHISPER_MODEL=large-v3 WHISPER_DEVICE=cuda WHISPER_COMPUTE=float16 DIARIZE_DEVICE=cpu
 EXPOSE 9000
+# HF_TOKEN 은 런타임에 주입: docker run -e HF_TOKEN=hf_xxx ...
 CMD ["uvicorn", "whisper_server:app", "--host", "0.0.0.0", "--port", "9000"]

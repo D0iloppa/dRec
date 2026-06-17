@@ -21,8 +21,11 @@ services:
       # 2단계 회의록 — claude CLI(Claude Code) OAuth 토큰 (`claude setup-token` 발급)
       - DREC_CLAUDE_MODEL=${DREC_CLAUDE_MODEL:-claude-opus-4-8}
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
+      # 계정 인증 — 게스트(uuid)+JWT 서명키. OAuth 연동 시 같은 user 행에 provider/sub 채움.
+      - DREC_JWT_SECRET=${DREC_JWT_SECRET:?DREC_JWT_SECRET 를 .env 에 설정하세요}
     volumes:
       - drec_models:/root/.cache   # Whisper 모델 캐시(재시작 시 재다운로드 방지)
+      - drec_data:/data            # 녹음 오디오 영속 저장(재생/화자분리)
     networks:
       - dev-net
     restart: unless-stopped
@@ -33,3 +36,4 @@ networks:
 
 volumes:
   drec_models:
+  drec_data:
