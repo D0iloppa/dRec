@@ -42,3 +42,6 @@ ai-docs/
 
 # TS 증분 빌드 캐시
 *.tsbuildinfo
+
+# MCP 서버가 발급받아 보관하는 dobis 전용 게스트 토큰(비밀)
+mcp/.drec_token.json

@@ -1,0 +1,12 @@
+{
+  "name": "drec-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "dobis ↔ dRec 연동 MCP 서버 — 회의 녹취(STT)+회의록 정리 파이프라인을 stdio 도구로 노출",
+  "main": "index.js",
+  "bin": { "drec-mcp": "index.js" },
+  "scripts": { "start": "node index.js" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  }
+}
