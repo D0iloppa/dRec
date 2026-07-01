@@ -2,9 +2,6 @@
 import { create } from 'zustand';
 import { api, MeetingSummary } from './api';
 
-// 모바일(좁은 화면)에서는 사이드바를 기본 닫힘으로 둔다.
-const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
-
 interface MeetingsState {
   items: MeetingSummary[];
   query: string;
@@ -19,7 +16,7 @@ interface MeetingsState {
 export const useMeetings = create<MeetingsState>((set, get) => ({
   items: [],
   query: '',
-  sidebarOpen: isDesktop,
+  sidebarOpen: false,
   setQuery: (q) => {
     set({ query: q });
     get().refresh();

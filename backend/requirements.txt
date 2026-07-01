@@ -11,3 +11,4 @@ tzdata>=2024.1
 
 # dRec — 로컬 STT (1단계). ffmpeg 바이너리가 시스템에 있어야 한다.
 faster-whisper==1.0.3
+requests>=2.31   # faster-whisper utils(모델 다운로드)가 import — 누락 시 로컬 전사 자체가 import 실패

@@ -1,4 +1,4 @@
-// dRec 백엔드 API 래퍼. 모든 경로는 동일 오리진의 /api/* (게이트웨이가 drec 로 프록시).
+// dRec 백엔드 API 래퍼.
 
 export interface MeetingSummary {
   id: number;
@@ -21,13 +21,21 @@ export interface SpeakerInfo {
 
 export interface MeetingDetail extends MeetingSummary {
   transcript: string;
+  named_transcript: string;
   segments: Segment[];
   speaker_meta: Record<string, SpeakerInfo>;
   minutes: string;
   has_audio: boolean;
+  canvas_id: string;
 }
 
-// ── 인증: 최초 진입 시 게스트(uuid) 자동 발급 → 이후 모든 요청에 Bearer 부착 ──
+// SSE 이벤트 타입
+export type SseEvent =
+  | { type: 'segment'; start: number; end: number; text: string; seq?: number }
+  | { type: 'diarize'; segments: Segment[] }
+  | { type: 'done' }
+  | { type: 'error'; message: string };
+
 const TOKEN_KEY = 'drec_token';
 let tokenInFlight: Promise<string> | null = null;
 
@@ -54,7 +62,7 @@ async function authedFetch(url: string, opts: RequestInit = {}): Promise<Respons
   });
   let res = await fetch(url, withAuth(await getToken()));
   if (res.status === 401) {
-    localStorage.removeItem(TOKEN_KEY); // 토큰 만료/무효 → 재발급 후 1회 재시도
+    localStorage.removeItem(TOKEN_KEY);
     res = await fetch(url, withAuth(await getToken()));
   }
   return res;
@@ -87,25 +95,41 @@ export const api = {
       body: JSON.stringify({ meta }),
     }).then(json<{ id: number; speaker_meta: Record<string, SpeakerInfo> }>),
 
-  createSession: () => authedFetch('/api/sessions', { method: 'POST' }).then(json<{ id: number }>),
-  sendChunk: (id: number, seq: number, blob: Blob) => {
+  generateMinutes: (id: number, speakerMeta: Record<string, SpeakerInfo>) =>
+    authedFetch(`/api/meetings/${id}/minutes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ speaker_meta: speakerMeta }),
+    }).then(json<{ id: number; status: string }>),
+
+  regenerateMeeting: (id: number) =>
+    authedFetch(`/api/meetings/${id}/regenerate`, { method: 'POST' }).then(json<{ id: number; status: string }>),
+
+  createSession: () => authedFetch('/api/sessions', { method: 'POST' }).then(json<{ id: number; canvas_id: string }>),
+  sendChunk: (id: number, seq: number, timeOffset: number, blob: Blob) => {
     const fd = new FormData();
     fd.append('seq', String(seq));
+    fd.append('time_offset', String(timeOffset));
     fd.append('audio', blob, `chunk-${seq}.webm`);
     return authedFetch(`/api/sessions/${id}/chunk`, { method: 'POST', body: fd }).then(
-      json<{ seq: number; text: string }>,
+      json<{ ok: boolean }>,
     );
-  },
-  uploadSessionAudio: (id: number, blob: Blob) => {
-    const fd = new FormData();
-    fd.append('audio', blob, 'full.webm');
-    return authedFetch(`/api/sessions/${id}/audio`, { method: 'POST', body: fd }).then(json<{ ok: boolean }>);
   },
   finishSession: (id: number) =>
     authedFetch(`/api/sessions/${id}/finish`, { method: 'POST' }).then(
-      json<{ id: number; transcript: string; minutes: string }>,
+      json<{ id: number; status: string }>,
     ),
 
-  // <audio> 태그는 헤더를 못 실으므로 토큰을 쿼리로 전달.
+  getCanvas: (id: number) =>
+    authedFetch(`/api/meetings/${id}/canvas`).then(json<{ canvas_data: string }>),
+  putCanvas: (id: number, data: object) =>
+    authedFetch(`/api/meetings/${id}/canvas`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).then(json<{ ok: boolean }>),
+
+  // SSE: EventSource는 헤더 불가 → 토큰을 쿼리로 전달
+  eventsUrl: (id: number) => `/api/sessions/${id}/events?t=${localStorage.getItem(TOKEN_KEY) ?? ''}`,
   audioUrl: (id: number) => `/api/meetings/${id}/audio?t=${localStorage.getItem(TOKEN_KEY) ?? ''}`,
 };

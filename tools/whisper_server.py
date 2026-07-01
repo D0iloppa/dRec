@@ -62,11 +62,14 @@ async def transcribe(audio: UploadFile = File(...), language: str = Form("ko")):
         tmp.write(await audio.read())
         path = tmp.name
     try:
-        segments, _info = model.transcribe(path, language=language, vad_filter=True)
-        text = "\n".join(s.text.strip() for s in segments if s.text.strip())
+        segments_gen, _info = model.transcribe(path, language=language, vad_filter=True)
+        segs = [(round(s.start, 2), round(s.end, 2), s.text.strip()) for s in segments_gen if s.text.strip()]
     finally:
         os.unlink(path)
-    return {"text": text}
+    return {
+        "text": "\n".join(t for _, _, t in segs),
+        "segments": [{"start": s, "end": e, "text": t} for s, e, t in segs],
+    }
 
 
 @app.post("/diarize")
