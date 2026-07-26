@@ -1,0 +1,4 @@
+[submodule "watch-app"]
+	path = watch-app
+	url = https://github.com/D0iloppa/dRec-watch.git
+	branch = main
