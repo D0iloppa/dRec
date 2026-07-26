@@ -572,6 +572,51 @@ audio { width: 100%; margin-bottom: 16px; }
   height: 100%;
 }
 
+/* ── 로그인 ───────────────────────────────────────────────── */
+.login-wrap {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.login-box {
+  width: 100%;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.login-box h1 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  text-align: center;
+}
+.login-input {
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+}
+.login-input:focus { outline: 1px solid var(--accent); }
+.login-btn {
+  padding: 9px 11px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+}
+.login-btn:disabled { opacity: 0.5; cursor: default; }
+.login-err {
+  color: var(--danger);
+  font-size: 13px;
+  text-align: center;
+}
+
 /* ── 재생성 버튼 ───────────────────────────────────────────── */
 .regen-btn {
   display: inline-flex;

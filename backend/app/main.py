@@ -19,6 +19,7 @@ from .transcribe import transcribe, diarize, transcribe_with_timestamps
 from .minutes import make_minutes, make_named_transcript
 from .db import Session, Meeting, MeetingChunk, User, init_db
 from .auth import current_user, issue_token, user_from_token_str
+from .accounts import init_accounts_db, verify_login
 
 STATIC_DIR = os.environ.get("DREC_STATIC_DIR", "/app/web/dist")
 DATA_DIR = os.environ.get("DREC_DATA_DIR", "/data")
@@ -54,6 +55,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def _startup():
     await init_db()
+    init_accounts_db()
 
 
 @app.get("/api/health")
@@ -70,6 +72,19 @@ async def auth_guest():
         session.add(User(id=uid, provider="guest"))
         await session.commit()
     return {"token": issue_token(uid), "user_id": uid}
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/api/auth/login")
+async def auth_login(req: LoginRequest):
+    """id/pw 로그인. 계정 생성은 CLI(`-m app.create_account_cli`)로만 — 회원가입 없음."""
+    if not verify_login(req.username, req.password):
+        raise HTTPException(status_code=401, detail="invalid credentials")
+    return {"token": issue_token(req.username), "user_id": req.username}
 
 
 async def _owned(session, meeting_id: int, user: str) -> Meeting:

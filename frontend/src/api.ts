@@ -37,33 +37,39 @@ export type SseEvent =
   | { type: 'error'; message: string };
 
 const TOKEN_KEY = 'drec_token';
-let tokenInFlight: Promise<string> | null = null;
+const UID_KEY = 'drec_uid';
 
-async function getToken(): Promise<string> {
-  const existing = localStorage.getItem(TOKEN_KEY);
-  if (existing) return existing;
-  if (!tokenInFlight) {
-    tokenInFlight = fetch('/api/auth/guest', { method: 'POST' })
-      .then((r) => r.json())
-      .then((d: { token: string; user_id: string }) => {
-        localStorage.setItem(TOKEN_KEY, d.token);
-        localStorage.setItem('drec_uid', d.user_id);
-        return d.token;
-      })
-      .finally(() => { tokenInFlight = null; });
+/** 로그인 상태가 바뀌었음을 앱(App.tsx 게이트)에 알리는 이벤트. */
+export const AUTH_EVENT = 'drec:auth';
+
+export function getStoredToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+/** 토큰 폐기 + 로그인 화면으로 되돌리기(게이트가 이벤트를 듣는다). */
+export function logout(): void {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(UID_KEY);
+  window.dispatchEvent(new Event(AUTH_EVENT));
+}
+
+function requireToken(): string {
+  const token = getStoredToken();
+  if (!token) {
+    logout();
+    throw new Error('로그인이 필요합니다');
   }
-  return tokenInFlight;
+  return token;
 }
 
 async function authedFetch(url: string, opts: RequestInit = {}): Promise<Response> {
-  const withAuth = (token: string): RequestInit => ({
+  const res = await fetch(url, {
     ...opts,
-    headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` },
+    headers: { ...(opts.headers || {}), Authorization: `Bearer ${requireToken()}` },
   });
-  let res = await fetch(url, withAuth(await getToken()));
   if (res.status === 401) {
-    localStorage.removeItem(TOKEN_KEY);
-    res = await fetch(url, withAuth(await getToken()));
+    logout();
+    throw new Error('로그인이 필요합니다');
   }
   return res;
 }
@@ -77,6 +83,20 @@ async function json<T>(res: Response): Promise<T> {
 }
 
 export const api = {
+  login: (username: string, password: string) =>
+    fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    })
+      .then(json<{ token: string; user_id: string }>)
+      .then((d) => {
+        localStorage.setItem(TOKEN_KEY, d.token);
+        localStorage.setItem(UID_KEY, d.user_id);
+        window.dispatchEvent(new Event(AUTH_EVENT));
+        return d;
+      }),
+
   listMeetings: (q = '') =>
     authedFetch(`/api/meetings${q ? `?q=${encodeURIComponent(q)}` : ''}`).then(json<MeetingSummary[]>),
   getMeeting: (id: number) => authedFetch(`/api/meetings/${id}`).then(json<MeetingDetail>),
