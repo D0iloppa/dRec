@@ -42,6 +42,7 @@ class Meeting(Base):
     user_id: Mapped[str | None] = mapped_column(String(36), index=True, nullable=True)
     title: Mapped[str] = mapped_column(String(512), default="")
     # recording → 라이브 녹음 중
+    # uploaded → 업로드 확정(원본 오디오 저장) 완료, 전사 대기/진행 전
     # processing → 화자분리 실행 중
     # transcribed → 화자분리 완료, 회의록 미생성
     # processing_minutes → 회의록 생성 중

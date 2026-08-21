@@ -231,7 +231,7 @@ async def finish_session(meeting_id: int, background_tasks: BackgroundTasks, use
     return {"id": meeting_id, "status": "processing"}
 
 
-async def _run_diarization(meeting_id: int, live_transcript: str) -> None:
+async def _run_diarization(meeting_id: int, live_transcript: str, auto_minutes: bool = False) -> None:
     """백그라운드: 화자분리 → DB 업데이트 → SSE push."""
     transcript = live_transcript
     segments_json = ""
@@ -287,6 +287,10 @@ async def _run_diarization(meeting_id: int, live_transcript: str) -> None:
 
     segments = json.loads(segments_json) if segments_json else []
     await _push_event(meeting_id, {"type": "diarize", "segments": segments})
+
+    if auto_minutes:
+        # 화면 없는 워치 클라이언트용: 전사 성공 시 이어서 회의록까지 자동 생성 (speaker_meta 없음)
+        await _run_minutes(meeting_id, transcript, segments, {})
 
 
 # ── 회의록 생성 ──────────────────────────────────────────────────────────────
@@ -347,6 +351,16 @@ async def _run_minutes(meeting_id: int, transcript: str, segments: list, speaker
         await _push_event(meeting_id, {"type": "error", "message": str(e)})
 
 
+def _prepare_transcription(m: Meeting) -> str:
+    """전사(화자분리) 재실행 준비: 기존 결과 초기화 + status=processing. 커밋은 호출자가 담당. live_transcript(폴백용) 반환."""
+    live_transcript = m.transcript
+    m.status = "processing"
+    m.segments = ""
+    m.named_transcript = ""
+    m.minutes = ""
+    return live_transcript
+
+
 @app.post("/api/meetings/{meeting_id}/regenerate")
 async def regenerate_meeting(meeting_id: int, background_tasks: BackgroundTasks, user: str = Depends(current_user)):
     """원천 오디오 기반으로 화자분리·회의록 전체 재실행."""
@@ -354,11 +368,23 @@ async def regenerate_meeting(meeting_id: int, background_tasks: BackgroundTasks,
         m = await _owned(session, meeting_id, user)
         if not os.path.isfile(_full_audio_path(meeting_id)):
             raise HTTPException(status_code=404, detail="원천 오디오 없음 — 재생성 불가")
-        live_transcript = m.transcript
-        m.status = "processing"
-        m.segments = ""
-        m.named_transcript = ""
-        m.minutes = ""
+        live_transcript = _prepare_transcription(m)
+        await session.commit()
+
+    background_tasks.add_task(_run_diarization, meeting_id, live_transcript)
+    return {"id": meeting_id, "status": "processing"}
+
+
+@app.post("/api/meetings/{meeting_id}/transcribe")
+async def transcribe_meeting(meeting_id: int, background_tasks: BackgroundTasks, user: str = Depends(current_user)):
+    """업로드 확정(uploaded) 후 전사 실행, 또는 실패한 전사의 수동 재시도."""
+    async with Session() as session:
+        m = await _owned(session, meeting_id, user)
+        if m.status not in ("uploaded", "transcribed", "error"):
+            raise HTTPException(status_code=400, detail=f"전사 가능한 상태가 아님 (현재: {m.status})")
+        if not os.path.isfile(_full_audio_path(meeting_id)):
+            raise HTTPException(status_code=404, detail="원천 오디오 없음")
+        live_transcript = _prepare_transcription(m)
         await session.commit()
 
     background_tasks.add_task(_run_diarization, meeting_id, live_transcript)
@@ -367,9 +393,65 @@ async def regenerate_meeting(meeting_id: int, background_tasks: BackgroundTasks,
 
 # ── 파일 업로드(기존 녹음) ───────────────────────────────────────────────────
 
+@app.post("/api/uploads")
+async def upload_recording(
+    background_tasks: BackgroundTasks,
+    audio: UploadFile = File(...),
+    title: str | None = Form(None),
+    auto_minutes: bool = Form(False),
+    user: str = Depends(current_user),
+):
+    """업로드 확정 단계: meeting 생성 + 오디오 remux까지만 동기 수행하고 즉시 반환, 전사는 백그라운드로 이어감."""
+    async with Session() as session:
+        m = Meeting(title=title or (audio.filename or "audio"), status="processing", user_id=user)
+        session.add(m)
+        await session.commit()
+        await session.refresh(m)
+        meeting_id = m.id
+
+    mdir = _meeting_dir(meeting_id)
+    os.makedirs(mdir, exist_ok=True)
+    suffix = os.path.splitext(audio.filename or "")[1] or ".audio"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(await audio.read())
+        src_path = tmp.name
+    full_audio = _full_audio_path(meeting_id)
+    try:
+        await run_in_threadpool(
+            lambda: subprocess.run(
+                ["ffmpeg", "-y", "-i", src_path, "-c:a", "libopus", full_audio],
+                check=True, capture_output=True,
+            )
+        )
+    finally:
+        os.unlink(src_path)
+    # remux 실패 시 예외가 그대로 전파되어 500 응답 — meeting row는 status="processing"인 채 고아로 남는다.
+    # 업로드 확정 실패이므로 클라이언트가 재업로드해야 하며, 고아 row/파일 정리는 이번 범위 밖(운영 정리 대상).
+
+    async with Session() as session:
+        m = await session.get(Meeting, meeting_id)
+        m.status = "uploaded"
+        await session.commit()
+
+    background_tasks.add_task(_start_transcription_after_upload, meeting_id, auto_minutes)
+    return {"id": meeting_id, "status": "uploaded"}
+
+
+async def _start_transcription_after_upload(meeting_id: int, auto_minutes: bool) -> None:
+    """업로드 백그라운드 태스크: status=processing 커밋 후 _run_diarization 실행 (uploaded 중복 전사 방지용)."""
+    async with Session() as session:
+        m = await session.get(Meeting, meeting_id)
+        if not m:
+            return
+        m.status = "processing"
+        await session.commit()
+    await _run_diarization(meeting_id, "", auto_minutes)
+
+
 @app.post("/api/process")
 async def process(audio: UploadFile = File(...), user: str = Depends(current_user)):
-    """오디오 파일 업로드 → 화자분리 전사 → meeting 생성 (즉시 done 또는 transcribed 상태)."""
+    """[DEPRECATED] 오디오 파일 업로드 → 화자분리 전사를 한 요청 안에서 동기 수행 (즉시 done 또는 transcribed 상태).
+    신규 클라이언트는 /api/uploads(즉시 반환 + 백그라운드 전사)를 사용할 것. 하위호환을 위해 유지."""
     async with Session() as session:
         m = Meeting(title=audio.filename or "audio", status="processing", user_id=user)
         session.add(m)
