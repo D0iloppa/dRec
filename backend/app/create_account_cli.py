@@ -2,6 +2,8 @@
 
 사용:
     docker compose exec drec python -m app.create_account_cli <username> <password>
+
+비밀번호를 잊어버린 경우의 재설정은 `app.change_password_cli` 참고.
 """
 
 import argparse

@@ -88,6 +88,27 @@ button { font-family: inherit; cursor: pointer; }
 }
 .new-btn:hover { filter: brightness(0.96); }
 
+.sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+}
+.footer-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text);
+  text-align: left;
+}
+.footer-btn:hover { background: rgba(0, 0, 0, 0.05); }
+
 .meeting-list { flex: 1; overflow-y: auto; padding: 4px 6px 16px; }
 .meeting-item {
   display: flex;

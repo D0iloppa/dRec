@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
-import { Plus, Search, Trash2, Pencil, Mic } from 'lucide-react';
+import { Plus, Search, Trash2, Pencil, Mic, LogOut, KeyRound } from 'lucide-react';
 import { useMeetings } from '../store';
-import { api } from '../api';
+import { api, logout } from '../api';
 import { dialog } from '../ui/dialog';
 
 function fmtDate(iso: string): string {
@@ -32,6 +32,17 @@ export default function Sidebar() {
     await api.deleteMeeting(id).catch((e) => dialog.error(String(e.message || e)));
     await refresh();
     if (activeId === id) navigate('/');
+  }
+
+  async function changePassword() {
+    const input = await dialog.changePassword();
+    if (!input) return;
+    try {
+      await api.changePassword(input.oldPassword, input.newPassword);
+      await dialog.alert('비밀번호가 변경됐습니다');
+    } catch (e) {
+      dialog.error(String((e as Error).message || e));
+    }
   }
 
   return (
@@ -86,6 +97,15 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      <div className="sidebar-footer">
+        <button className="footer-btn" onClick={changePassword}>
+          <KeyRound size={14} /> 비밀번호 변경
+        </button>
+        <button className="footer-btn" onClick={logout}>
+          <LogOut size={14} /> 로그아웃
+        </button>
+      </div>
     </aside>
   );
 }

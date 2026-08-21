@@ -19,7 +19,7 @@ from .transcribe import transcribe, diarize, transcribe_with_timestamps
 from .minutes import make_minutes, make_named_transcript
 from .db import Session, Meeting, MeetingChunk, User, init_db
 from .auth import current_user, issue_token, user_from_token_str
-from .accounts import init_accounts_db, verify_login
+from .accounts import init_accounts_db, set_password, verify_login
 
 STATIC_DIR = os.environ.get("DREC_STATIC_DIR", "/app/web/dist")
 DATA_DIR = os.environ.get("DREC_DATA_DIR", "/data")
@@ -85,6 +85,24 @@ async def auth_login(req: LoginRequest):
     if not verify_login(req.username, req.password):
         raise HTTPException(status_code=401, detail="invalid credentials")
     return {"token": issue_token(req.username), "user_id": req.username}
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+
+@app.post("/api/auth/change-password")
+async def auth_change_password(req: ChangePasswordRequest, user: str = Depends(current_user)):
+    """로그인 상태에서 본인 비밀번호 변경. 기존 비밀번호 검증 후 덮어쓴다.
+
+    401 대신 400 — 프론트 authedFetch 는 401을 "토큰 무효"로 해석해 자동 로그아웃시키므로,
+    기존 비밀번호 오타는 그와 구분해야 한다.
+    """
+    if not verify_login(user, req.old_password):
+        raise HTTPException(status_code=400, detail="invalid credentials")
+    set_password(user, req.new_password)
+    return {"ok": True}
 
 
 async def _owned(session, meeting_id: int, user: str) -> Meeting:

@@ -97,6 +97,13 @@ export const api = {
         return d;
       }),
 
+  changePassword: (oldPassword: string, newPassword: string) =>
+    authedFetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+    }).then(json<{ ok: boolean }>),
+
   listMeetings: (q = '') =>
     authedFetch(`/api/meetings${q ? `?q=${encodeURIComponent(q)}` : ''}`).then(json<MeetingSummary[]>),
   getMeeting: (id: number) => authedFetch(`/api/meetings/${id}`).then(json<MeetingDetail>),

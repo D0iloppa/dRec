@@ -51,6 +51,23 @@ export const dialog = {
       }),
     }).then((r) => (r.isConfirmed ? (r.value as { name: string; color: string }) : null)),
 
+  /** 비밀번호 변경 — 기존/새 비밀번호. 확인 시 {oldPassword, newPassword}, 취소 시 null. */
+  changePassword: () =>
+    Swal.fire({
+      ...base,
+      title: '비밀번호 변경',
+      html:
+        `<input id="sw-old-pw" type="password" class="swal2-input" placeholder="기존 비밀번호" autocomplete="current-password">` +
+        `<input id="sw-new-pw" type="password" class="swal2-input" placeholder="새 비밀번호" autocomplete="new-password">`,
+      showCancelButton: true,
+      confirmButtonText: '변경',
+      cancelButtonText: '취소',
+      preConfirm: () => ({
+        oldPassword: (document.getElementById('sw-old-pw') as HTMLInputElement).value,
+        newPassword: (document.getElementById('sw-new-pw') as HTMLInputElement).value,
+      }),
+    }).then((r) => (r.isConfirmed ? (r.value as { oldPassword: string; newPassword: string }) : null)),
+
   /** 단순 알림. */
   alert: (title: string, text?: string) => Swal.fire({ ...base, title, text }),
 

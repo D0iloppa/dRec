@@ -38,6 +38,20 @@ docker compose up -d --build
 확인: `https://drec.doil.me/` (녹음 UI) · `https://drec.doil.me/api/health`
 (마이크 사용은 HTTPS 필수 — drec.doil.me 로 접속)
 
+## 계정
+
+회원가입 화면/API 는 없다 — 개인용 도구라 계정은 서버 관리자가 CLI 로만 만든다. 로그인은 id/pw(`POST /api/auth/login`), 비밀번호는 SQLite(`accounts.db`, `drec_data` 볼륨)에 bcrypt 해시로만 저장된다.
+
+```bash
+# 계정 생성 (이미 있으면 실패)
+docker compose exec drec python -m app.create_account_cli <username> <password>
+
+# 비밀번호를 잊어버린 경우 강제 재설정 (기존 비밀번호 확인 없이 root 권한으로 덮어쓴다)
+docker compose exec drec python -m app.change_password_cli <username> <new_password>
+```
+
+로그인한 상태에서 본인이 직접 비밀번호를 바꾸려면 사이드바 하단의 "비밀번호 변경"(기존 비밀번호 확인 필요) 또는 `POST /api/auth/change-password`를 쓴다. 로그아웃은 사이드바 하단 버튼 또는 `logout()`(토큰만 로컬에서 폐기, 서버 세션 개념 없음).
+
 ## GPU 원격 전사 (선택)
 
 이 호스트엔 GPU 가 없다. 별도 GPU PC 가 있으면 전사를 위임할 수 있다(쿠버네티스 불필요).

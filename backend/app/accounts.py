@@ -49,3 +49,15 @@ def verify_login(username: str, password: str) -> bool:
     if not row:
         return False
     return bcrypt.verify(password, row[0])
+
+
+def set_password(username: str, new_password: str) -> None:
+    """비밀번호 덮어쓰기(존재 확인 없이). 없는 계정이면 ValueError."""
+    init_accounts_db()
+    with sqlite3.connect(DB_PATH) as conn:
+        cur = conn.execute(
+            "UPDATE accounts SET password_hash = ? WHERE username = ?",
+            (bcrypt.hash(new_password), username),
+        )
+        if cur.rowcount == 0:
+            raise ValueError(f"존재하지 않는 계정: {username}")
