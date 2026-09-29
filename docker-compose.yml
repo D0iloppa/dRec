@@ -27,11 +27,14 @@ services:
       - drec_models:/root/.cache   # Whisper 모델 캐시(재시작 시 재다운로드 방지)
       - drec_data:/data            # 녹음 오디오 영속 저장(재생/화자분리)
     networks:
-      - dev-net
+      - edge   # §5 F-6B: gw ingress 공용망 (dev-net에서 이전)
+      - devdb   # §5 F-8: 메인 db(devdb) 전용망
     restart: unless-stopped
 
 networks:
-  dev-net:
+  edge:
+    external: true
+  devdb:
     external: true
 
 volumes:
