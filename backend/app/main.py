@@ -260,9 +260,9 @@ async def _owned(session, meeting_id: int, user: str) -> Meeting:
 # ── SSE 스트림 ───────────────────────────────────────────────────────────────
 
 @app.get("/api/sessions/{meeting_id}/events")
-async def session_events(meeting_id: int, t: str = ""):
-    """`EventSource`용 SSE 스트림. 토큰은 쿼리 파라미터 ?t= 로 전달."""
-    user = user_from_token_str(t)
+async def session_events(meeting_id: int, t: str = "", authorization: str = Header("")):
+    """`EventSource`용 SSE 스트림. 인증: `Authorization: Bearer`(우선, 서버 간 중계) 또는 `?t=`(EventSource)."""
+    user = user_from_header_or_token(authorization, t)
     async with Session() as session:
         await _owned(session, meeting_id, user)
 
