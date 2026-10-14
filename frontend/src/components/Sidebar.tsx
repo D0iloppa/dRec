@@ -4,6 +4,8 @@ import { Plus, Search, Trash2, Pencil, Mic, LogOut, KeyRound } from 'lucide-reac
 import { useMeetings } from '../store';
 import { api, logout } from '../api';
 import { dialog } from '../ui/dialog';
+import GpuStatus from './GpuStatus';
+import PushToggle from './PushToggle';
 
 function fmtDate(iso: string): string {
   const d = new Date(iso);
@@ -97,6 +99,9 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      <GpuStatus open={sidebarOpen} />
+      <PushToggle />
 
       <div className="sidebar-footer">
         <button className="footer-btn" onClick={changePassword}>

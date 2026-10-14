@@ -23,9 +23,14 @@ services:
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
       # 계정 인증 — 게스트(uuid)+JWT 서명키. OAuth 연동 시 같은 user 행에 provider/sub 채움.
       - DREC_JWT_SECRET=${DREC_JWT_SECRET:?DREC_JWT_SECRET 를 .env 에 설정하세요}
+      # Web Push(VAPID) — 파이프라인 단계 완료 알림. 키 미설정이면 알림 기능 비활성
+      - DREC_VAPID_PUBLIC_KEY=${DREC_VAPID_PUBLIC_KEY:-}
+      - DREC_VAPID_PRIVATE_KEY=${DREC_VAPID_PRIVATE_KEY:-}
+      - DREC_VAPID_SUBJECT=${DREC_VAPID_SUBJECT:-mailto:user5@wellconn.co.kr}
     volumes:
-      - drec_models:/root/.cache   # Whisper 모델 캐시(재시작 시 재다운로드 방지)
-      - drec_data:/data            # 녹음 오디오 영속 저장(재생/화자분리)
+      # DAS 바인드(2026-10-14 named volume drec_drec_* 에서 이전). PC B는 DAS 마운트 확인 후 Docker Desktop을 띄운다.
+      - /mnt/wsl/das/data/drec/models:/root/.cache   # Whisper 모델 캐시(재시작 시 재다운로드 방지)
+      - /mnt/wsl/das/data/drec/data:/data            # 녹음 오디오·accounts.db 영속 저장(재생/화자분리)
     networks:
       - edge   # §5 F-6B: gw ingress 공용망 (dev-net에서 이전)
       - devdb   # §5 F-8: 메인 db(devdb) 전용망
@@ -36,7 +41,3 @@ networks:
     external: true
   devdb:
     external: true
-
-volumes:
-  drec_models:
-  drec_data:

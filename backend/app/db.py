@@ -2,9 +2,9 @@
 
 import os
 import uuid as _uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy import String, Text, DateTime, Integer, Float, ForeignKey, func, text
+from sqlalchemy import String, Text, DateTime, Integer, Float, ForeignKey, func, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine, AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -47,6 +47,7 @@ class Meeting(Base):
     # transcribed → 화자분리 완료, 회의록 미생성
     # processing_minutes → 회의록 생성 중
     # done → 완료
+    # paused → 사용자가 일시정지(또는 재시작으로 중단된 처리). 재개 시 checkpoint 기준으로 이어감
     # error → 파이프라인 오류
     status: Mapped[str] = mapped_column(String(32), default="done")
     transcript: Mapped[str] = mapped_column(Text, default="")
@@ -60,6 +61,16 @@ class Meeting(Base):
     canvas_id: Mapped[str] = mapped_column(String(64), default="")
     canvas_data: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # 파이프라인 진행 단계(status 와 별개의 표시용): prepare|transcribe|diarize|minutes|done|error, 레거시/녹음 중 NULL
+    stage: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # transcribe 단계의 진행률 0..1 (그 외 NULL)
+    progress: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 현재 stage 진입 시각(UTC, naive)
+    stage_started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # full.webm 길이(초, ffprobe)
+    audio_duration_sec: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 일시정지 체크포인트 JSON: {"stage": "prepare|transcribe|diarize|minutes", "transcript": [[start,end,text],…]?}
+    checkpoint: Mapped[str] = mapped_column(Text, default="")
 
 
 class MeetingChunk(Base):
@@ -75,6 +86,20 @@ class MeetingChunk(Base):
     time_offset: Mapped[float] = mapped_column(Float, default=0.0)
 
 
+class PushSubscription(Base):
+    """Web Push 구독(기기 1대 = endpoint 1개). 소유자(user_id)의 모든 기기에 알림을 보낸다."""
+
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(36), index=True)
+    endpoint: Mapped[str] = mapped_column(Text, unique=True)
+    p256dh: Mapped[str] = mapped_column(String(255))
+    auth: Mapped[str] = mapped_column(String(255))
+    user_agent: Mapped[str] = mapped_column(String(512), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -88,5 +113,55 @@ async def init_db() -> None:
             "ALTER TABLE meeting_chunks ADD COLUMN IF NOT EXISTS time_offset FLOAT DEFAULT 0.0",
             "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS canvas_id VARCHAR(64) DEFAULT ''",
             "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS canvas_data TEXT DEFAULT ''",
+            "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS stage VARCHAR(32)",
+            "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS progress REAL",
+            "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS stage_started_at TIMESTAMP",
+            "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS audio_duration_sec REAL",
+            "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS checkpoint TEXT DEFAULT ''",
         ]:
             await conn.execute(text(stmt))
+
+
+async def recover_interrupted() -> list[int]:
+    """앱 시작 시: 처리 중이던 회의(재시작으로 워커가 사라짐)를 paused 로 돌린다. recording 은 건드리지 않는다."""
+    import json
+
+    async with Session() as session:
+        rows = (await session.execute(
+            select(Meeting).where(Meeting.status.in_(("processing", "processing_minutes")))
+        )).scalars().all()
+        for m in rows:
+            if m.status == "processing_minutes":
+                stage = "minutes"
+            else:
+                stage = m.stage if m.stage in ("prepare", "transcribe", "diarize") else "prepare"
+            m.status = "paused"
+            m.stage = stage
+            m.progress = None
+            m.checkpoint = json.dumps({"stage": stage})
+        await session.commit()
+        return [m.id for m in rows]
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)  # stage_started_at 은 naive UTC(TIMESTAMP)
+
+
+async def set_stage(meeting_id: int, stage: str, progress: float | None = None) -> None:
+    """stage 전환 — stage_started_at 갱신, progress 초기화. 이벤트 루프에서 await 로 호출."""
+    async with Session() as session:
+        await session.execute(
+            text("UPDATE meetings SET stage=:s, progress=:p, stage_started_at=:t WHERE id=:id"),
+            {"s": stage, "p": progress, "t": _utcnow(), "id": meeting_id},
+        )
+        await session.commit()
+
+
+async def set_progress(meeting_id: int, stage: str, progress: float | None) -> None:
+    """같은 stage 안의 진행률만 갱신. stage 가 이미 바뀌었으면(늦게 도착한 쓰기) 무시."""
+    async with Session() as session:
+        await session.execute(
+            text("UPDATE meetings SET progress=:p WHERE id=:id AND stage=:s"),
+            {"p": progress, "id": meeting_id, "s": stage},
+        )
+        await session.commit()

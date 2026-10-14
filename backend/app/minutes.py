@@ -8,6 +8,8 @@ import os
 import re
 import subprocess
 
+from .control import Cancelled, RunControl, kill_proc
+
 MODEL = os.environ.get("DREC_CLAUDE_MODEL", "claude-opus-4-8")
 CLAUDE_BIN = os.environ.get("DREC_CLAUDE_BIN", "claude")
 
@@ -67,16 +69,32 @@ def make_named_transcript(transcript: str, segments: list, speaker_meta: dict) -
     return result
 
 
-def make_minutes(transcript: str, timeout: int = 300) -> str:
-    """전사본을 받아 회의록 Markdown 문자열을 반환한다."""
+def make_minutes(transcript: str, timeout: int = 300, ctl: "RunControl | None" = None) -> str:
+    """전사본을 받아 회의록 Markdown 문자열을 반환한다. ctl 이 중단되면 프로세스를 죽이고 Cancelled."""
     stdin = PROMPT + transcript
-    result = subprocess.run(
+    proc = subprocess.Popen(
         [CLAUDE_BIN, "-p", "--model", MODEL],
-        input=stdin,
-        capture_output=True,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        timeout=timeout,
+        start_new_session=True,  # 프로세스 그룹 단위 kill 용
     )
-    if result.returncode != 0:
-        raise RuntimeError(f"claude CLI 실패 (code {result.returncode}): {result.stderr.strip()}")
-    return result.stdout.strip()
+    if ctl is not None:
+        ctl.proc = proc
+        if ctl.stop.is_set():  # request() 가 proc 등록보다 먼저 온 경우
+            kill_proc(proc)
+    try:
+        stdout, stderr = proc.communicate(stdin, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        kill_proc(proc)
+        proc.communicate()
+        raise
+    finally:
+        if ctl is not None:
+            ctl.proc = None
+    if ctl is not None and ctl.stop.is_set():
+        raise Cancelled()
+    if proc.returncode != 0:
+        raise RuntimeError(f"claude CLI 실패 (code {proc.returncode}): {stderr.strip()}")
+    return stdout.strip()

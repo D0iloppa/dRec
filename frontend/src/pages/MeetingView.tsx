@@ -6,7 +6,41 @@ import { FileText, ListMusic, PenLine, Play, Pause, Download, Copy, RefreshCw, M
 import { api, MeetingDetail, Segment, SpeakerInfo, SseEvent } from '../api';
 import { useMeetings } from '../store';
 import { dialog } from '../ui/dialog';
-import { SketchpadPanel } from '../components/Sketchpad';
+import { Sketch, prefetchSketchpad } from '../components/SketchpadLazy';
+import AudioCard from '../components/AudioCard';
+import PipelineMonitor, { PipelineAction } from '../components/PipelineMonitor';
+import { useUploader } from '../uploader';
+
+// 상세 응답 전에 먼저 그려지는 페이지 뼈대: 사이드바 목록에 있는 제목/날짜를 미리 보여주고 나머지는 스켈레톤.
+function MeetingShell({ id, error, onRetry }: { id: number; error: string; onRetry: () => void }) {
+  const item = useMeetings((s) => s.items.find((m) => m.id === id));
+  return (
+    <div className="page" aria-busy={!error}>
+      <div className="page-title page-title-ro">{item?.title || (error ? '회의를 불러오지 못했습니다' : '\u00a0')}</div>
+      <div className="page-meta">
+        {item ? <span>{new Date(item.created_at).toLocaleString('ko-KR')}</span> : <span className="skel" style={{ width: 150 }} />}
+      </div>
+      {error ? (
+        <div className="pipeline failed">
+          <div className="pipe-title">불러오기 실패</div>
+          <div className="pipe-hint">{error}</div>
+          <div className="pipe-actions"><button className="pipe-btn primary" onClick={onRetry}>다시 시도</button></div>
+        </div>
+      ) : (
+        <>
+          <div className="skel skel-card" />
+          <div className="chips" aria-hidden>
+            <span className="skel skel-chip" /><span className="skel skel-chip" /><span className="skel skel-chip" />
+          </div>
+          <div className="skel skel-line" style={{ width: '70%' }} />
+          <div className="skel skel-line" />
+          <div className="skel skel-line" style={{ width: '85%' }} />
+          <div className="skel skel-line" style={{ width: '55%' }} />
+        </>
+      )}
+    </div>
+  );
+}
 
 type Tab = 'minutes' | 'transcript' | 'sketch';
 
@@ -34,18 +68,19 @@ function downloadFile(content: string, filename: string, mimeType = 'text/plain'
 
 // 자막 싱킹 플레이어
 function SyncedTranscript({
-  segments, speakers, meta, audioUrl,
+  segments, speakers, meta, audioUrl, durationSec,
 }: {
   segments: Segment[];
   speakers: string[];
   meta: Record<string, SpeakerInfo>;
   audioUrl: string;
+  durationSec?: number | null;
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [active, setActive] = useState(-1);
   const [playing, setPlaying] = useState(false);
   const [cur, setCur] = useState(0);
-  const [dur, setDur] = useState(0);
+  const [dur, setDur] = useState(durationSec || 0);
   const [clipEnd, setClipEnd] = useState<number | null>(null);
   const rowsRef = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -86,9 +121,9 @@ function SyncedTranscript({
       <audio
         ref={audioRef}
         src={audioUrl}
-        preload="auto"
+        preload="none"
         onTimeUpdate={onTimeUpdate}
-        onLoadedMetadata={(e) => setDur(e.currentTarget.duration || 0)}
+        onLoadedMetadata={(e) => { const d = e.currentTarget.duration; if (Number.isFinite(d) && d > 0) setDur(d); }}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
       />
@@ -191,15 +226,6 @@ function SpeakerForm({ speakers, initialMeta, onGenerate, busy }: {
   );
 }
 
-function ProcessingBanner({ message }: { message: string }) {
-  return (
-    <div className="processing-banner">
-      <span className="processing-spinner" />
-      {message}
-    </div>
-  );
-}
-
 // ── 메인 뷰 ─────────────────────────────────────────────────────────────────
 
 export default function MeetingView() {
@@ -210,16 +236,21 @@ export default function MeetingView() {
   const [transcribedTab, setTranscribedTab] = useState<'record' | 'sketch'>('record');
   const [error, setError] = useState('');
   const [minutesBusy, setMinutesBusy] = useState(false);
+  const [localAction, setLocalAction] = useState<PipelineAction | null>(null); // 요청 전송 중(서버 pending_action 이 보이기 전)
+  const [seenTranscript, setSeenTranscript] = useState(false); // 전사 탭은 처음 열 때 마운트(숨은 오디오·세그먼트 렌더 방지)
+  const [reloadKey, setReloadKey] = useState(0);
   const refresh = useMeetings((s) => s.refresh);
 
   useEffect(() => {
     let alive = true;
-    setData(null); setError(''); setTab('minutes'); setTranscribedTab('record');
+    setData(null); setError(''); setTab('minutes'); setTranscribedTab('record'); setSeenTranscript(false);
     api.getMeeting(mid)
       .then((d) => alive && setData(d))
       .catch((e) => alive && setError(String(e.message || e)));
     return () => { alive = false; };
-  }, [mid]);
+  }, [mid, reloadKey]);
+
+  useEffect(() => { if (tab === 'transcript') setSeenTranscript(true); }, [tab]);
 
   // SSE: processing 상태 → 화자분리 완료 대기
   useEffect(() => {
@@ -240,23 +271,39 @@ export default function MeetingView() {
     return () => es.close();
   }, [data?.status, mid]);
 
-  // 폴링 폴백: processing_minutes
+  // 진행 상태 폴링: 처리 중에는 progress/stage 갱신을 위해 항상 setData (SSE 는 그대로 유지)
+  const upload = useUploader((u) => u.byId[mid]);
+  const status = data?.status;
+  const polling = !!status && (['recording', 'uploaded', 'processing', 'processing_minutes'].includes(status) || !!upload);
   useEffect(() => {
-    if (data?.status !== 'processing_minutes') return;
+    if (!polling) return;
     const t = setInterval(() => {
-      api.getMeeting(mid).then((d) => { setData(d); if (d.status !== 'processing_minutes') refresh(); }).catch(() => {});
-    }, 3000);
+      api.getMeeting(mid)
+        .then((d) => {
+          setData(d);
+          if (d.status !== status) refresh();
+        })
+        .catch(() => {});
+    }, 2000);
     return () => clearInterval(t);
-  }, [data?.status, mid, refresh]);
+  }, [polling, status, mid, refresh]);
 
-  // processing 폴백 폴링 (SSE 끊긴 경우)
+  // 서버가 상태를 바꿨으면(일시정지/취소/재개 반영) 요청 중 표시 해제
+  useEffect(() => { setLocalAction(null); }, [status]);
+
+  // 서버가 recording 을 벗어났으면(= /finish 반영) 완료된 업로드 항목 정리
   useEffect(() => {
-    if (data?.status !== 'processing') return;
-    const t = setInterval(() => {
-      api.getMeeting(mid).then((d) => { if (d.status !== 'processing') { setData(d); if (d.status === 'done') refresh(); } }).catch(() => {});
-    }, 5000);
-    return () => clearInterval(t);
-  }, [data?.status, mid, refresh]);
+    if (upload?.phase === 'done' && status && status !== 'recording') useUploader.getState().clear(mid);
+  }, [upload?.phase, status, mid]);
+
+  // 오디오 두 개(원본 플레이어 / 전사 싱크 플레이어)가 동시에 재생되지 않도록 하나가 재생되면 나머지를 멈춘다.
+  useEffect(() => {
+    const onPlay = (e: Event) => {
+      document.querySelectorAll('audio').forEach((a) => { if (a !== e.target) a.pause(); });
+    };
+    document.addEventListener('play', onPlay, true); // play 는 버블링하지 않으므로 캡처
+    return () => document.removeEventListener('play', onPlay, true);
+  }, []);
 
   async function saveTitle(title: string) {
     if (!data || title === data.title) return;
@@ -289,6 +336,46 @@ export default function MeetingView() {
     }
   }
 
+  const CANCEL_NOTE: Record<string, string> = {
+    minutes: '회의록 생성을 취소합니다. 전사 결과는 유지됩니다.',
+    other: '진행을 취소합니다. 업로드된 녹음은 유지되고 이 처리의 결과는 버려집니다. 나중에 전사를 다시 시작할 수 있습니다.',
+  };
+
+  async function handlePipelineAction(kind: PipelineAction) {
+    if (!data) return;
+    if (kind === 'cancel') {
+      const isMinutes = data.status === 'processing_minutes' || data.checkpoint?.stage === 'minutes';
+      if (!(await dialog.confirm('처리를 취소할까요?', CANCEL_NOTE[isMinutes ? 'minutes' : 'other'], '취소하기'))) return;
+    }
+    setError('');
+    setLocalAction(kind);
+    try {
+      if (kind === 'pause') await api.pauseMeeting(mid);
+      else if (kind === 'resume') await api.resumeMeeting(mid);
+      else await api.cancelMeeting(mid);
+      const d = await api.getMeeting(mid);
+      setData(d);
+      refresh();
+      if (d.status !== data.status) setLocalAction(null);
+    } catch (e) {
+      setLocalAction(null);
+      setError(String((e as Error).message || e));
+    }
+  }
+
+  async function handleRestart() {
+    setError('');
+    setLocalAction('resume');
+    try {
+      await api.transcribeMeeting(mid);
+      setData(await api.getMeeting(mid));
+      refresh();
+    } catch (e) {
+      setLocalAction(null);
+      setError(String((e as Error).message || e));
+    }
+  }
+
   async function handleRegenerate() {
     if (!data) return;
     const ok = await dialog.confirm('원천 오디오를 기반으로 화자분리와 회의록을 다시 생성합니다.');
@@ -296,7 +383,7 @@ export default function MeetingView() {
     setError('');
     try {
       await api.regenerateMeeting(mid);
-      setData((prev) => prev ? { ...prev, status: 'processing', segments: [], named_transcript: '', minutes: '' } : null);
+      setData((prev) => prev ? { ...prev, status: 'processing', stage: null, progress: null, stage_started_at: null, segments: [], named_transcript: '', minutes: '' } : null);
     } catch (e) {
       setError(String((e as Error).message || e));
     }
@@ -346,13 +433,28 @@ export default function MeetingView() {
     downloadFile(JSON.stringify(payload, null, 2), `${title}_transcript.json`, 'application/json');
   }
 
-  if (error && !data) return <div className="page"><p className="err">{error}</p></div>;
-  if (!data) return <div className="page"><p style={{ color: '#999' }}>불러오는 중…</p></div>;
+  // 응답 전에도 뼈대를 즉시 그린다(전체 화면 스피너로 막지 않음).
+  if (!data) return <MeetingShell id={mid} error={error} onRetry={() => setReloadKey((k) => k + 1)} />;
 
   const isDone = data.status === 'done';
   const isTranscribed = data.status === 'transcribed';
   const isProcessing = data.status === 'processing';
   const isProcessingMinutes = data.status === 'processing_minutes';
+  const isPaused = data.status === 'paused';
+  // 업로드 중이거나(상세 페이지로 먼저 이동) 업로드 직후 서버 처리 대기 상태: 탭 없이 모니터만 보여준다.
+  const isPreProcessing = data.status === 'recording' || data.status === 'uploaded';
+  const retryUpload = () => useUploader.getState().retry(mid);
+  const recoverChunks = () => { void useUploader.getState().recover(mid); };
+  const monitor = (
+    <PipelineMonitor
+      data={data} upload={upload}
+      pending={localAction ?? data.pending_action ?? null}
+      onRetry={retryUpload} onRecover={recoverChunks} onRegenerate={handleRegenerate}
+      onAction={handlePipelineAction}
+      onCancelUpload={() => useUploader.getState().cancel(mid)}
+      onRestart={handleRestart}
+    />
+  );
 
   return (
     <div className="page">
@@ -364,17 +466,33 @@ export default function MeetingView() {
       />
       <div className="page-meta">
         <span>{new Date(data.created_at).toLocaleString('ko-KR')}</span>
+        {upload && upload.phase !== 'done' && <span className="badge processing">{upload.phase === 'failed' ? '업로드 실패' : '업로드 중…'}</span>}
         {isProcessing && <span className="badge processing">화자 분리 중…</span>}
         {isProcessingMinutes && <span className="badge processing">회의록 생성 중…</span>}
+        {isPaused && <span className="badge">일시정지됨</span>}
         {data.status === 'error' && <span className="badge error">오류</span>}
-        {data.has_audio && (
+        {data.has_audio && !upload && (
           <button className="regen-btn" onClick={handleRegenerate} title="원천 오디오로 재생성">
             <RefreshCw size={13} /> 재생성
           </button>
         )}
       </div>
 
+      {data.has_audio && <AudioCard id={mid} hasM4a={!!data.has_m4a} durationSec={data.audio_duration_sec} />}
+
       {error && <p className="err">{error}</p>}
+
+      {isPreProcessing && (
+        upload || data.status === 'uploaded' ? monitor : (
+          <div className="pipeline failed">
+            <div className="pipe-title">녹음이 완료 처리되지 않았습니다</div>
+            <div className="pipe-hint">녹음 도중 창이 닫혔거나 업로드가 끊긴 것 같습니다. 이미 전송된 조각으로 회의록을 만들 수 있습니다.</div>
+            <div className="pipe-actions">
+              <button className="pipe-btn primary" onClick={recoverChunks}>조각으로 복구</button>
+            </div>
+          </div>
+        )
+      )}
 
       {/* processing + transcribed: [회의록 녹취 | 스케치패드] 탭 */}
       {(isProcessing || isTranscribed) && (
@@ -383,14 +501,14 @@ export default function MeetingView() {
             <button className={`chip${transcribedTab === 'record' ? ' active' : ''}`} onClick={() => setTranscribedTab('record')}>
               <Mic size={15} /> 회의록 녹취
             </button>
-            <button className={`chip${transcribedTab === 'sketch' ? ' active' : ''}`} onClick={() => setTranscribedTab('sketch')}>
+            <button className={`chip${transcribedTab === 'sketch' ? ' active' : ''}`} onClick={() => setTranscribedTab('sketch')} onPointerEnter={prefetchSketchpad}>
               <PenLine size={15} /> 스케치패드
             </button>
           </div>
 
           {transcribedTab === 'record' && (
             <>
-              {isProcessing && <ProcessingBanner message="화자 분리 중입니다…" />}
+              {isProcessing && monitor}
               {isTranscribed && (
                 <>
                   <SpeakerForm
@@ -416,6 +534,7 @@ export default function MeetingView() {
                           speakers={speakers}
                           meta={data.speaker_meta}
                           audioUrl={api.audioUrl(mid)}
+                          durationSec={data.audio_duration_sec}
                         />
                       ) : (
                         <div className="transcript">
@@ -434,11 +553,11 @@ export default function MeetingView() {
             </>
           )}
 
-          {transcribedTab === 'sketch' && <SketchpadPanel meetingId={mid} />}
+          {transcribedTab === 'sketch' && <Sketch meetingId={mid} />}
         </>
       )}
 
-      {isProcessingMinutes && <ProcessingBanner message="회의록을 생성하고 있습니다…" />}
+      {(isProcessingMinutes || isPaused) && monitor}
 
       {isDone && (
         <>
@@ -449,7 +568,7 @@ export default function MeetingView() {
             <button className={`chip${tab === 'transcript' ? ' active' : ''}`} onClick={() => setTab('transcript')}>
               <ListMusic size={15} /> 전사 전문
             </button>
-            <button className={`chip${tab === 'sketch' ? ' active' : ''}`} onClick={() => setTab('sketch')}>
+            <button className={`chip${tab === 'sketch' ? ' active' : ''}`} onClick={() => setTab('sketch')} onPointerEnter={prefetchSketchpad}>
               <PenLine size={15} /> 스케치패드
             </button>
           </div>
@@ -483,7 +602,7 @@ export default function MeetingView() {
                 <Download size={13} /> JSON 저장
               </button>
             </div>
-            {data.segments?.length ? (
+            {!seenTranscript ? null : data.segments?.length ? (
               <>
                 <SpeakerLegend speakers={speakers} meta={data.speaker_meta} onEdit={editSpeaker} />
                 {data.has_audio ? (
@@ -492,6 +611,7 @@ export default function MeetingView() {
                     speakers={speakers}
                     meta={data.speaker_meta}
                     audioUrl={api.audioUrl(mid)}
+                    durationSec={data.audio_duration_sec}
                   />
                 ) : (
                   <div className="transcript">
@@ -514,7 +634,7 @@ export default function MeetingView() {
           </div>
 
           {/* ── 스케치패드 탭 ── */}
-          {tab === 'sketch' && <SketchpadPanel meetingId={mid} />}
+          {tab === 'sketch' && <Sketch meetingId={mid} />}
         </>
       )}
     </div>

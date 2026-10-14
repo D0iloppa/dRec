@@ -18,3 +18,37 @@ self.addEventListener('fetch', (e) => {
       .catch(() => caches.match(e.request)),
   );
 });
+
+// ── Web Push ────────────────────────────────────────────────────────────────
+// 페이로드: {title, body, url, tag}. 같은 tag(회의별)는 기기에서 이전 알림을 교체한다.
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data ? e.data.text() : '' }; }
+  e.waitUntil(
+    self.registration.showNotification(d.title || 'dRec', {
+      body: d.body || '',
+      tag: d.tag || undefined,
+      renotify: !!d.tag,
+      icon: '/icon.svg',
+      badge: '/icon.svg',
+      data: { url: d.url || '/' },
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = new URL((e.notification.data && e.notification.data.url) || '/', self.location.origin).href;
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (list) => {
+      for (const c of list) {
+        if (new URL(c.url).origin === self.location.origin && 'focus' in c) {
+          await c.focus();
+          if ('navigate' in c) { try { await c.navigate(url); } catch { /* 무시 */ } }
+          return;
+        }
+      }
+      return self.clients.openWindow(url);
+    }),
+  );
+});

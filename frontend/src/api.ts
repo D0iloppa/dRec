@@ -27,6 +27,30 @@ export interface MeetingDetail extends MeetingSummary {
   minutes: string;
   has_audio: boolean;
   canvas_id: string;
+  // 파이프라인 모니터 필드 (구버전 백엔드에선 undefined → 상태 기반 폴백)
+  has_m4a?: boolean;
+  audio_duration_sec?: number | null;
+  stage?: PipelineStage | null;
+  progress?: number | null; // 0..1, 전사 단계에서만
+  stage_started_at?: string | null; // ISO UTC
+  // 일시정지/취소 (구버전 백엔드·레거시 행에선 undefined)
+  checkpoint?: { stage: PipelineStage | null; has_transcript: boolean } | null; // status === 'paused' 일 때
+  pending_action?: 'pause' | 'cancel' | null; // 요청됨, 워커가 정리 중
+}
+
+// 'cancelled' 는 취소로 uploaded 로 되돌아간 행의 표시용 stage
+export type PipelineStage = 'prepare' | 'transcribe' | 'diarize' | 'minutes' | 'done' | 'error' | 'cancelled';
+
+export interface GpuHealth {
+  reachable: boolean;
+  configured?: boolean;
+  loaded: boolean;
+  diarize_loaded: boolean;
+  warming: boolean;
+  idle_sec: number | null;
+  idle_unload_sec: number | null;
+  caffeine_sec: number;
+  warmup_requested_at: number | null;
 }
 
 // SSE 이벤트 타입
@@ -132,7 +156,41 @@ export const api = {
   regenerateMeeting: (id: number) =>
     authedFetch(`/api/meetings/${id}/regenerate`, { method: 'POST' }).then(json<{ id: number; status: string }>),
 
-  createSession: () => authedFetch('/api/sessions', { method: 'POST' }).then(json<{ id: number; canvas_id: string }>),
+  pauseMeeting: (id: number) => authedFetch(`/api/meetings/${id}/pause`, { method: 'POST' }).then(json<{ id: number; status: string }>),
+  resumeMeeting: (id: number) => authedFetch(`/api/meetings/${id}/resume`, { method: 'POST' }).then(json<{ id: number; status: string }>),
+  cancelMeeting: (id: number) => authedFetch(`/api/meetings/${id}/cancel`, { method: 'POST' }).then(json<{ id: number; status: string }>),
+  transcribeMeeting: (id: number) => authedFetch(`/api/meetings/${id}/transcribe`, { method: 'POST' }).then(json<{ id: number; status: string }>),
+
+  pushPublicKey: () => authedFetch('/api/push/vapid-public-key').then(json<{ public_key: string }>),
+  pushSubscribe: (sub: PushSubscriptionJSON) =>
+    authedFetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint: sub.endpoint, keys: sub.keys }),
+    }).then(json<{ ok: boolean }>),
+  pushUnsubscribe: (endpoint: string) =>
+    authedFetch('/api/push/subscribe', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint }),
+    }).then(json<{ ok: boolean }>),
+  pushTest: () => authedFetch('/api/push/test', { method: 'POST' }).then(json<{ sent: number }>),
+
+  gpuHealth: () => authedFetch('/api/gpu/health').then(json<GpuHealth>),
+  gpuWarmup: () => authedFetch('/api/gpu/warmup', { method: 'POST' }).then(json<{ requested: boolean }>),
+  gpuCaffeine: (ttlSec = 900) =>
+    authedFetch('/api/gpu/caffeine', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ttl_sec: ttlSec }),
+    }).then(json<{ reachable: boolean; caffeine_sec: number }>),
+
+  /** title 을 주면 그 제목으로, 비우면 서버가 'YYYY-MM-DD n번째 회의' 를 부여한다. */
+  createSession: (title?: string) => {
+    const fd = new FormData();
+    if (title?.trim()) fd.append('title', title.trim());
+    return authedFetch('/api/sessions', { method: 'POST', body: fd }).then(json<{ id: number; canvas_id: string; title: string }>);
+  },
   sendChunk: (id: number, seq: number, timeOffset: number, blob: Blob) => {
     const fd = new FormData();
     fd.append('seq', String(seq));
@@ -158,5 +216,30 @@ export const api = {
 
   // SSE: EventSource는 헤더 불가 → 토큰을 쿼리로 전달
   eventsUrl: (id: number) => `/api/sessions/${id}/events?t=${localStorage.getItem(TOKEN_KEY) ?? ''}`,
-  audioUrl: (id: number) => `/api/meetings/${id}/audio?t=${localStorage.getItem(TOKEN_KEY) ?? ''}`,
+  audioUrl: (id: number, format?: 'm4a' | 'webm') =>
+    `/api/meetings/${id}/audio?t=${localStorage.getItem(TOKEN_KEY) ?? ''}${format ? `&format=${format}` : ''}`,
+
+  /** 전체 녹음 업로드(XHR: fetch 는 업로드 진행률을 못 준다). */
+  uploadAudio: (id: number, blob: Blob, filename: string, onProgress: (loaded: number, total: number) => void) => {
+    const xhr = new XMLHttpRequest();
+    const promise = new Promise<void>((resolve, reject) => {
+      xhr.open('POST', `/api/sessions/${id}/audio`);
+      xhr.setRequestHeader('Authorization', `Bearer ${requireToken()}`);
+      xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded, e.total); };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) return resolve();
+        if (xhr.status === 401) { logout(); return reject(new Error('로그인이 필요합니다')); }
+        let detail = '';
+        try { detail = JSON.parse(xhr.responseText).detail; } catch { /* 본문이 JSON 아님 */ }
+        reject(new Error(detail || `업로드 실패 (${xhr.status})`));
+      };
+      xhr.onerror = () => reject(new Error('네트워크 오류로 업로드가 중단되었습니다'));
+      xhr.ontimeout = () => reject(new Error('업로드 시간이 초과되었습니다'));
+      xhr.onabort = () => reject(new Error('업로드가 취소되었습니다'));
+      const fd = new FormData();
+      fd.append('audio', blob, filename);
+      xhr.send(fd);
+    });
+    return { promise, abort: () => xhr.abort() };
+  },
 };
