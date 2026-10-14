@@ -41,3 +41,10 @@ async def current_user(authorization: str = Header("")) -> str:
 def user_from_token_str(token: str) -> str:
     """쿼리스트링 등 헤더 외 경로(<audio> 태그)용 토큰 검증."""
     return _decode(token)
+
+
+def user_from_header_or_token(authorization: str, token: str) -> str:
+    """Bearer 헤더 우선, 없으면 쿼리 토큰(<audio src>). 둘 다 없으면 401."""
+    if authorization.startswith("Bearer "):
+        return _decode(authorization[len("Bearer "):])
+    return _decode(token)

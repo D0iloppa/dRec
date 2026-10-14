@@ -9,7 +9,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, BackgroundTasks, Request
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, BackgroundTasks, Request, Header
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
@@ -24,7 +24,7 @@ from .db import Session, Meeting, MeetingChunk, User, init_db, recover_interrupt
 from . import control, push
 from .control import Cancelled
 from .gpu import router as gpu_router
-from .auth import current_user, issue_token, user_from_token_str
+from .auth import current_user, issue_token, user_from_token_str, user_from_header_or_token
 from .accounts import init_accounts_db, set_password, verify_login
 
 STATIC_DIR = os.environ.get("DREC_STATIC_DIR", "/app/web/dist")
@@ -874,9 +874,10 @@ async def put_canvas(meeting_id: int, request: Request, user: str = Depends(curr
 
 
 @app.get("/api/meetings/{meeting_id}/audio")
-async def get_meeting_audio(meeting_id: int, t: str = "", format: str = "webm"):
-    """재생용 오디오. inline + Range 지원(FileResponse, starlette>=0.39 — fastapi 0.115.5 는 >=0.40)."""
-    user = user_from_token_str(t)
+async def get_meeting_audio(meeting_id: int, t: str = "", format: str = "webm", authorization: str = Header("")):
+    """재생용 오디오. inline + Range 지원(FileResponse, starlette>=0.39 — fastapi 0.115.5 는 >=0.40).
+    인증: `Authorization: Bearer`(우선, 서버 간 호출) 또는 `?t=`(<audio src>)."""
+    user = user_from_header_or_token(authorization, t)
     async with Session() as session:
         await _owned(session, meeting_id, user)
     if format == "m4a":
