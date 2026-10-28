@@ -1,11 +1,16 @@
 import { lazy, Suspense } from 'react';
+import { readInkMode } from './inkElements';
 
 // 스케치패드(Excalidraw ≈ 1.6MB)는 탭을 열 때만 받는다 — 초기(entry) 번들에서 제외.
 const load = () => import('./Sketchpad').then((m) => ({ default: m.SketchpadPanel }));
 const Lazy = lazy(load);
 
 /** 탭 hover/터치 시 미리 요청(이미 받았으면 no-op). */
-export const prefetchSketchpad = () => { void load(); };
+export const prefetchSketchpad = () => {
+  void load();
+  // 펜 모드면 무거운 Excalidraw 청크는 받지 않는다.
+  if (!readInkMode()) void import('./ExcalidrawEditor');
+};
 
 export function Sketch({ meetingId }: { meetingId: number }) {
   return (
