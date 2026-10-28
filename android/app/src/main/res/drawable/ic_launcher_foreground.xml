@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- dRec 아이콘 전경. PWA frontend/public/icon.svg (512 viewBox) 와 동일 형상.
+     glyph 를 0.95 배 축소 + 세로 중심 보정하여 adaptive 안전영역(중심 66/108) 안에 둔다. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group
+        android:name="glyph"
+        android:pivotX="256"
+        android:pivotY="256"
+        android:scaleX="0.95"
+        android:scaleY="0.95"
+        android:translateY="-6.2">
+        <!-- 마이크 캡슐: rect x206 y120 w100 h170 rx50 -->
+        <path
+            android:fillColor="#eb5757"
+            android:pathData="M206,170 A50,50 0 0 1 256,120 A50,50 0 0 1 306,170 L306,240 A50,50 0 0 1 256,290 A50,50 0 0 1 206,240 Z" />
+        <!-- 호: M166 250 a90 90 0 0 0 180 0 -->
+        <path
+            android:strokeColor="#ffffff"
+            android:strokeWidth="26"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:fillColor="#00000000"
+            android:pathData="M166,250 a90,90 0 0 0 180,0" />
+        <!-- 세로 막대 -->
+        <path
+            android:strokeColor="#ffffff"
+            android:strokeWidth="26"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:fillColor="#00000000"
+            android:pathData="M256,340 L256,392" />
+        <!-- 받침선 -->
+        <path
+            android:strokeColor="#ffffff"
+            android:strokeWidth="26"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:fillColor="#00000000"
+            android:pathData="M200,392 L312,392" />
+    </group>
+</vector>
