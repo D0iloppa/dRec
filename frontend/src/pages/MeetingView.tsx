@@ -10,6 +10,7 @@ import { Sketch, prefetchSketchpad } from '../components/SketchpadLazy';
 import AudioCard from '../components/AudioCard';
 import PipelineMonitor, { PipelineAction } from '../components/PipelineMonitor';
 import { useUploader } from '../uploader';
+import LocalBackupPanel from '../components/LocalBackupPanel';
 
 // 상세 응답 전에 먼저 그려지는 페이지 뼈대: 사이드바 목록에 있는 제목/날짜를 미리 보여주고 나머지는 스켈레톤.
 function MeetingShell({ id, error, onRetry }: { id: number; error: string; onRetry: () => void }) {
@@ -479,6 +480,7 @@ export default function MeetingView() {
       </div>
 
       {data.has_audio && <AudioCard id={mid} hasM4a={!!data.has_m4a} durationSec={data.audio_duration_sec} />}
+      <LocalBackupPanel meetingId={mid} serverDurationSec={data.audio_duration_sec} serverHasAudio={!!data.has_audio} />
 
       {error && <p className="err">{error}</p>}
 

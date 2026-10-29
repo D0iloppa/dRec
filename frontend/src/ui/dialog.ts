@@ -68,6 +68,27 @@ export const dialog = {
       }),
     }).then((r) => (r.isConfirmed ? (r.value as { oldPassword: string; newPassword: string }) : null)),
 
+  /** 오탭에 강한 확인(녹음 종료용): 열린 직후 armMs 동안 확인 버튼을 잠근다(더블탭·펜/손바닥 연속 터치가 바로 확인되지 않게).
+   *  취소에 기본 포커스(Enter 오입력 방지), 바깥 탭은 취소. 확인 시 true. */
+  confirmGuarded: (title: string, text: string, confirmText: string, armMs = 700) =>
+    Swal.fire({
+      ...base,
+      icon: 'question',
+      title,
+      text,
+      showCancelButton: true,
+      confirmButtonText: confirmText,
+      cancelButtonText: '취소',
+      focusCancel: true,
+      reverseButtons: true,
+      didOpen: () => {
+        const btn = Swal.getConfirmButton();
+        if (!btn) return;
+        btn.disabled = true;
+        setTimeout(() => { btn.disabled = false; }, armMs);
+      },
+    }).then((r) => r.isConfirmed),
+
   /** 단순 알림. */
   alert: (title: string, text?: string) => Swal.fire({ ...base, title, text }),
 

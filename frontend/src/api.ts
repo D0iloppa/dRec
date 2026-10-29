@@ -98,10 +98,15 @@ async function authedFetch(url: string, opts: RequestInit = {}): Promise<Respons
   return res;
 }
 
+/** HTTP 오류(상태 코드 보존 — 재시도 큐가 404 같은 영구 실패를 구분한다). */
+export class HttpError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error((body as any).detail || `요청 실패 (${res.status})`);
+    throw new HttpError((body as any).detail || `요청 실패 (${res.status})`, res.status);
   }
   return res.json() as Promise<T>;
 }
@@ -200,6 +205,13 @@ export const api = {
       json<{ ok: boolean }>,
     );
   },
+  /** 녹음 화면 생존 신호(서버 무음 감시용). 일시정지 중엔 state='paused' 로 알려 오탐을 막는다. */
+  sessionHeartbeat: (id: number, state: 'recording' | 'paused') =>
+    authedFetch(`/api/sessions/${id}/heartbeat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state }),
+    }).then(json<{ ok: boolean }>),
   finishSession: (id: number) =>
     authedFetch(`/api/sessions/${id}/finish`, { method: 'POST' }).then(
       json<{ id: number; status: string }>,
@@ -219,8 +231,9 @@ export const api = {
   audioUrl: (id: number, format?: 'm4a' | 'webm') =>
     `/api/meetings/${id}/audio?t=${localStorage.getItem(TOKEN_KEY) ?? ''}${format ? `&format=${format}` : ''}`,
 
-  /** 전체 녹음 업로드(XHR: fetch 는 업로드 진행률을 못 준다). */
-  uploadAudio: (id: number, blob: Blob, filename: string, onProgress: (loaded: number, total: number) => void) => {
+  /** 전체 녹음 업로드(XHR: fetch 는 업로드 진행률을 못 준다).
+   *  여러 개(마이크 재연결로 녹음기가 바뀐 구간들)면 같은 `audio` 필드로 순서대로 보내고 서버가 이어 붙인다. */
+  uploadAudio: (id: number, blobs: Blob[], onProgress: (loaded: number, total: number) => void) => {
     const xhr = new XMLHttpRequest();
     const promise = new Promise<void>((resolve, reject) => {
       xhr.open('POST', `/api/sessions/${id}/audio`);
@@ -231,13 +244,13 @@ export const api = {
         if (xhr.status === 401) { logout(); return reject(new Error('로그인이 필요합니다')); }
         let detail = '';
         try { detail = JSON.parse(xhr.responseText).detail; } catch { /* 본문이 JSON 아님 */ }
-        reject(new Error(detail || `업로드 실패 (${xhr.status})`));
+        reject(new HttpError(detail || `업로드 실패 (${xhr.status})`, xhr.status));
       };
       xhr.onerror = () => reject(new Error('네트워크 오류로 업로드가 중단되었습니다'));
       xhr.ontimeout = () => reject(new Error('업로드 시간이 초과되었습니다'));
       xhr.onabort = () => reject(new Error('업로드가 취소되었습니다'));
       const fd = new FormData();
-      fd.append('audio', blob, filename);
+      blobs.forEach((b, i) => fd.append('audio', b, `full-${i}.${b.type.includes('mp4') ? 'm4a' : 'webm'}`));
       xhr.send(fd);
     });
     return { promise, abort: () => xhr.abort() };

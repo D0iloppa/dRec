@@ -44,7 +44,9 @@ self.addEventListener('notificationclick', (e) => {
       for (const c of list) {
         if (new URL(c.url).origin === self.location.origin && 'focus' in c) {
           await c.focus();
-          if ('navigate' in c) { try { await c.navigate(url); } catch { /* 무시 */ } }
+          // 열린 탭을 직접 navigate 하면 페이지가 새로 로드돼 진행 중인 녹음이 끊긴다 →
+          // 이미 그 주소면 포커스만, 아니면 앱에 이동을 요청(앱이 녹음 중이면 무시). 구버전 앱은 포커스만 된다.
+          if (c.url !== url) c.postMessage({ type: 'drec:navigate', url: new URL(url).pathname + new URL(url).search });
           return;
         }
       }

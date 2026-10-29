@@ -814,3 +814,104 @@ span.skel { display: inline-block; height: 12px; }
 .sketch-native-btn { margin-right: auto; height: 44px; padding: 0 18px; font-size: 15px; font-weight: 600; border: 2px solid #000; border-radius: 0; color: #000; }
 .sketch-native-btn:disabled { opacity: .5; }
 .sketch-mode-btn:has(+ .sketch-native-btn) { margin-right: 8px; }
+
+/* ── 녹음 유실 재발방지(2026-10-29): 마이크 끊김 경고 · 전송 대기 · 미완료 녹음 복구 배너 ── */
+.mic-alert {
+  position: sticky; top: 0; z-index: 30;
+  margin: 0 0 12px; padding: 16px 18px;
+  border-radius: 12px;
+  background: var(--danger); color: #fff;
+  text-align: center;
+  box-shadow: 0 6px 20px rgba(224, 62, 62, 0.35);
+  animation: mic-alert-blink 1.2s ease-in-out infinite;
+}
+.mic-alert.recovered {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 10px 14px; background: #fff4d6; color: #7a5b00; font-size: 14px;
+  box-shadow: none; animation: none;
+}
+@keyframes mic-alert-blink { 0%, 100% { opacity: 1; } 50% { opacity: .82; } }
+.mic-alert-title { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 22px; font-weight: 700; }
+.mic-alert-reason { margin-top: 6px; font-size: 14px; opacity: .95; }
+.mic-alert-btn {
+  margin-top: 12px; min-height: 52px; padding: 0 22px;
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 2px solid #fff; border-radius: 26px;
+  background: #fff; color: var(--danger);
+  font-size: 18px; font-weight: 700;
+}
+.mic-alert-busy { margin-top: 12px; display: inline-flex; align-items: center; gap: 6px; font-size: 15px; }
+.mic-alert-close { border: 0; background: transparent; color: inherit; font-size: 14px; padding: 4px; }
+.mic-alert .spin { animation: mic-spin 1s linear infinite; }
+@keyframes mic-spin { to { transform: rotate(360deg); } }
+.rec-substatus { margin-top: 6px; font-size: 13px; color: var(--text-dim); }
+
+.recover-banner {
+  margin: 0 0 14px; padding: 12px 14px;
+  border: 1px solid #f2c94c; border-radius: 10px;
+  background: #fffaeb; color: #5c4400;
+}
+.recover-head { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 14px; }
+.recover-item { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; }
+.recover-info { flex: 1 1 220px; min-width: 0; }
+.recover-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recover-meta { font-size: 12px; opacity: .85; }
+.recover-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.recover-actions button {
+  display: inline-flex; align-items: center; gap: 4px;
+  min-height: 34px; padding: 0 12px;
+  border: 1px solid #d9b84a; border-radius: 8px;
+  background: #fff; color: inherit; font-size: 13px;
+}
+.recover-actions button:disabled { opacity: .6; }
+.recover-actions button.danger { color: var(--danger); border-color: #f0b4b4; }
+
+/* ── 일시정지 오탭 방지·경고(2026-10-29 실제 원인: 시작 직후 오탭 → 3시간 일시정지) ── */
+.rec-indicator { cursor: default; pointer-events: none; }
+.rec-resume { background: #2f9e5b; box-shadow: 0 4px 16px rgba(47, 158, 91, 0.35); }
+.rec-controls { margin-top: 18px; display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+.rec-controls .finish-btn { margin-top: 0; }
+.pause-btn:disabled { opacity: .45; }
+.pause-alert {
+  position: sticky; top: 0; z-index: 31;
+  margin: 0 0 12px; padding: 16px 18px;
+  border-radius: 12px;
+  background: #e0a100; color: #fff;
+  text-align: center;
+  box-shadow: 0 6px 20px rgba(224, 161, 0, 0.4);
+  animation: pause-alert-blink 1s ease-in-out infinite;
+}
+@keyframes pause-alert-blink { 0%, 100% { background: #e0a100; } 50% { background: #b86e00; } }
+.pause-alert-title { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 22px; font-weight: 700; }
+.pause-alert-sub { margin-top: 4px; font-size: 14px; font-variant-numeric: tabular-nums; }
+.pause-alert-btn {
+  margin-top: 12px; min-height: 52px; padding: 0 24px;
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 2px solid #fff; border-radius: 26px;
+  background: #fff; color: #b86e00; font-size: 18px; font-weight: 700;
+}
+@media (prefers-reduced-motion: reduce) { .pause-alert, .mic-alert { animation: none; } }
+
+/* ── 버튼·툴바 글자 선택/iOS 텍스트 메뉴 방지: 펜·손가락으로 그리다 툴바 쪽으로 끌어도 선택되지 않게 ──
+   스케치패드 컨테이너 전체 + 녹음 화면 버튼. 입력 필드는 아래에서 다시 선택 가능하게 되돌린다. */
+.rec-split button, .rec-hero, .rec-controls, .mic-alert, .pause-alert,
+.sketch-panel, .sketch-toolbar, .sketch-mode-seg, .sketch-seg-btn, .sketch-mode-btn, .sketch-native-btn, .sketch-expand-btn,
+.ink-wrap, .ink-bar, .ink-btn, .ink-host, .ink-canvas, .excalidraw-host,
+.rec-right, .rec-sketch-idle {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.sketch-toolbar, .ink-bar, .sketch-mode-seg, .rec-controls, .rec-hero button { touch-action: manipulation; }
+.rec-split input, .rec-split textarea, .rec-split [contenteditable="true"],
+.sketch-panel input, .sketch-panel textarea, .sketch-panel [contenteditable="true"],
+.excalidraw-host input, .excalidraw-host textarea {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/* 타이머: 녹음 데이터 수신이 확인되지 않으면 시간이 멈춰 있고 흐리게 + 경고색 */
+.rec-time.unconfirmed { opacity: 0.45; }
+.rec-status .warn { color: #b45309; font-weight: 600; }

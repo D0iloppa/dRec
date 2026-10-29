@@ -21,7 +21,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from .transcribe import transcribe, diarize, transcribe_with_timestamps
 from .minutes import make_minutes, make_named_transcript
 from .db import Session, Meeting, MeetingChunk, User, init_db, recover_interrupted, set_stage, set_progress
-from . import control, push
+from . import control, push, recwatch
 from .control import Cancelled
 from .gpu import router as gpu_router
 from .auth import current_user, issue_token, user_from_token_str, user_from_header_or_token
@@ -88,15 +88,33 @@ def _save_upload(audio: UploadFile, suffix: str) -> str:
         return tmp.name
 
 
-async def _store_full_audio(meeting_id: int, audio: UploadFile, default_suffix: str) -> None:
-    """업로드 원본 → full.webm(원자적 remux) + 길이 DB 저장."""
+def _concat_args(srcs: list[str]) -> list[str]:
+    """여러 원본을 순서대로 이어 붙이는 ffmpeg 입력 인자(concat 필터 — 코덱/헤더가 다른 파일끼리도 동작)."""
+    if len(srcs) == 1:
+        return ["-i", srcs[0]]
+    args: list[str] = []
+    for p in srcs:
+        args += ["-i", p]
+    inputs = "".join(f"[{i}:a]" for i in range(len(srcs)))
+    return [*args, "-filter_complex", f"{inputs}concat=n={len(srcs)}:v=0:a=1"]
+
+
+async def _store_full_audio(meeting_id: int, audio: UploadFile | list[UploadFile], default_suffix: str) -> None:
+    """업로드 원본(1개 또는 이어 붙일 여러 개) → full.webm(원자적 remux) + 길이 DB 저장."""
+    files = audio if isinstance(audio, list) else [audio]
     os.makedirs(_meeting_dir(meeting_id), exist_ok=True)
-    suffix = os.path.splitext(audio.filename or "")[1] or default_suffix
-    src = await run_in_threadpool(_save_upload, audio, suffix)
+    srcs: list[str] = []
     try:
-        await run_in_threadpool(_make_full_webm, ["-i", src], _full_audio_path(meeting_id))
+        for f in files:
+            suffix = os.path.splitext(f.filename or "")[1] or default_suffix
+            srcs.append(await run_in_threadpool(_save_upload, f, suffix))
+        await run_in_threadpool(_make_full_webm, _concat_args(srcs), _full_audio_path(meeting_id))
     finally:
-        os.unlink(src)
+        for p in srcs:
+            os.unlink(p)
+    # 원본이 바뀌었으면 이전 재생용 m4a 는 낡은 것 — prepare 단계에서 다시 만든다
+    if os.path.isfile(_m4a_path(meeting_id)):
+        os.unlink(_m4a_path(meeting_id))
     await _save_duration(meeting_id)
 
 
@@ -201,6 +219,12 @@ async def _startup():
         for mid in recovered:  # 회의당 1건
             push.notify_meeting(mid, "paused")
     init_accounts_db()
+    recwatch.start()  # 녹음 무음 감시(DREC_REC_SILENCE_ALERT_MIN, 0 이면 끔)
+
+
+@app.on_event("shutdown")
+async def _shutdown():
+    recwatch.stop()
 
 
 @app.get("/api/health")
@@ -329,9 +353,18 @@ async def add_chunk(
     audio: UploadFile = File(...),
     user: str = Depends(current_user),
 ):
-    """VAD 청크 1개를 비동기 전사 → SSE push. HTTP 응답은 즉시 반환."""
+    """VAD 청크 1개를 비동기 전사 → SSE push. HTTP 응답은 즉시 반환.
+
+    클라이언트는 전송 실패 시 같은 seq 로 재전송한다 — 이미 전사된 seq 는 다시 처리하지 않는다(멱등).
+    """
     async with Session() as session:
         await _owned(session, meeting_id, user)
+        dup = (await session.execute(
+            select(MeetingChunk.id).where(MeetingChunk.meeting_id == meeting_id, MeetingChunk.seq == seq).limit(1)
+        )).first()
+    recwatch.on_chunk(meeting_id)
+    if dup:
+        return {"ok": True, "duplicate": True}
 
     suffix = os.path.splitext(audio.filename or "")[1] or ".webm"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
@@ -369,9 +402,60 @@ async def _process_chunk(meeting_id: int, seq: int, time_offset: float, tmp_path
     # chunk_path 삭제하지 않음
 
 
+class HeartbeatBody(BaseModel):
+    state: str = "recording"  # recording | paused
+
+
+@app.post("/api/sessions/{meeting_id}/heartbeat")
+async def session_heartbeat(meeting_id: int, body: HeartbeatBody, user: str = Depends(current_user)):
+    """녹음 화면 생존 신호(30초 주기). 무음 감시(recwatch)가 '페이지는 살아 있는데 조각이 없음'을 판정하는 데 쓴다."""
+    async with Session() as session:
+        await _owned(session, meeting_id, user)
+    recwatch.on_activity(meeting_id, "paused" if body.state == "paused" else "recording")
+    return {"ok": True}
+
+
+DIAG_MAX_BYTES = 5 * 1024 * 1024  # 회의당 diag.jsonl 상한(넘으면 더 쓰지 않는다)
+DIAG_MAX_EVENTS = 500
+
+
+class DiagBody(BaseModel):
+    events: list[dict] = []
+
+
+def _append_diag(meeting_id: int, lines: list[str]) -> int:
+    path = os.path.join(_meeting_dir(meeting_id), "diag.jsonl")
+    os.makedirs(_meeting_dir(meeting_id), exist_ok=True)
+    size = os.path.getsize(path) if os.path.exists(path) else 0
+    data = "".join(lines)
+    if size + len(data.encode()) > DIAG_MAX_BYTES:
+        return 0
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(data)
+    return len(lines)
+
+
+@app.post("/api/sessions/{meeting_id}/diag")
+async def session_diag(meeting_id: int, body: DiagBody, request: Request, user: str = Depends(current_user)):
+    """녹음 클라이언트 진단 로그(배치) → {DATA_DIR}/audio/{id}/diag.jsonl 에 한 줄씩 append.
+    녹음기 상태 전이·오류·트랙 이벤트·구간 크기·일시정지/재개 시각. 다음 사고 때 원인 확인용(2026-10-29 meeting 80)."""
+    async with Session() as session:
+        await _owned(session, meeting_id, user)
+    rt = time.time()
+    ua = (request.headers.get("user-agent") or "")[:200]
+    lines = [json.dumps({"rt": rt, "ua": ua, **e}, ensure_ascii=False, default=str) + "\n"
+             for e in body.events[:DIAG_MAX_EVENTS] if isinstance(e, dict)]
+    written = await run_in_threadpool(_append_diag, meeting_id, lines) if lines else 0
+    return {"ok": True, "written": written}
+
+
 @app.post("/api/sessions/{meeting_id}/audio")
-async def upload_session_audio(meeting_id: int, audio: UploadFile = File(...), user: str = Depends(current_user)):
-    """종료 시 연속 단일 녹음 전체를 업로드 → seekable webm 으로 보관."""
+async def upload_session_audio(meeting_id: int, audio: list[UploadFile] = File(...), user: str = Depends(current_user)):
+    """종료 시 연속 녹음 전체를 업로드 → seekable webm 으로 보관.
+
+    `audio` 를 여러 개 보내면(마이크 재연결로 녹음기가 바뀐 구간들) 순서대로 이어 붙인다. 1개면 기존과 동일.
+    이미 full.webm 이 있어도 덮어쓴다(로컬 백업으로 원본을 나중에 복구 업로드하는 경우).
+    """
     async with Session() as session:
         await _owned(session, meeting_id, user)
     await _store_full_audio(meeting_id, audio, ".webm")
@@ -388,6 +472,7 @@ async def finish_session(meeting_id: int, background_tasks: BackgroundTasks, use
         m.status = "processing"
         _mark_stage(m, "prepare")
         await session.commit()
+    recwatch.forget(meeting_id)
 
     background_tasks.add_task(_run_diarization, meeting_id, live_transcript)
     return {"id": meeting_id, "status": "processing"}
@@ -869,7 +954,10 @@ async def put_canvas(meeting_id: int, request: Request, user: str = Depends(curr
     async with Session() as session:
         m = await _owned(session, meeting_id, user)
         m.canvas_data = json.dumps(body)
+        recording = m.status == "recording"
         await session.commit()
+    if recording:
+        recwatch.on_activity(meeting_id)  # 녹음 중 캔버스 저장 = 클라이언트 생존 신호
     return {"ok": True}
 
 

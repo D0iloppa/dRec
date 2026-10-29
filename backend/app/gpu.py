@@ -7,6 +7,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from . import recwatch
 from . import transcribe as tr
 from .auth import current_user
 
@@ -81,6 +82,7 @@ class CaffeineRequest(BaseModel):
 
 
 @router.post("/caffeine")
-async def gpu_caffeine(req: CaffeineRequest | None = None):
+async def gpu_caffeine(req: CaffeineRequest | None = None, user: str = Depends(current_user)):
+    recwatch.on_user_activity(user)  # 녹음 화면이 5분마다 보낸다 → 구 클라이언트의 생존 신호(무음 감시)
     res = await _post("/caffeine", json={"ttl_sec": (req or CaffeineRequest()).ttl_sec})
     return {"reachable": res is not None, "caffeine_sec": int((res or {}).get("caffeine_sec") or 0)}

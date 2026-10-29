@@ -6,6 +6,7 @@ import { api, logout } from '../api';
 import { dialog } from '../ui/dialog';
 import GpuStatus from './GpuStatus';
 import PushToggle from './PushToggle';
+import LocalBackups from './LocalBackups';
 
 function fmtDate(iso: string): string {
   const d = new Date(iso);
@@ -102,6 +103,7 @@ export default function Sidebar() {
 
       <GpuStatus open={sidebarOpen} />
       <PushToggle />
+      <LocalBackups />
 
       <div className="sidebar-footer">
         <button className="footer-btn" onClick={changePassword}>
