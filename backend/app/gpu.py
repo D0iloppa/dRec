@@ -42,8 +42,10 @@ async def gpu_health():
             r = await c.get(f"{base}/health")
         r.raise_for_status()
         h = r.json()
+    except (httpx.ConnectError, httpx.ConnectTimeout):
+        return out  # 연결 자체가 안 됨(서버 꺼짐·네트워크) — warmup 직후라도 '연결 불가'
     except (httpx.HTTPError, ValueError):
-        out["warming"] = recent  # 콜드 로드 중 무응답 구간
+        out["warming"] = recent  # 연결은 됐는데 응답이 없음 = 콜드 로드 중 무응답 구간
         return out
     loaded = bool(h.get("loaded"))
     diar = bool(h.get("diarize_loaded", loaded))  # 구 서버는 필드 없음 → loaded 로 대체

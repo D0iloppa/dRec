@@ -24,6 +24,7 @@ GPU PC 준비:
 선행 기동/유지:
   POST /warmup   : 모델(whisper+pyannote)을 백그라운드로 미리 로드(즉시 반환, 멱등). 콜드 로드는 ~2.5분간 HTTP 무응답.
   POST /caffeine : ttl_sec(60..3600, 기본 900) 동안 유휴 해제를 막는다(녹음 중 유지용).
+  POST /sleep    : 유휴 타이머/caffeine 무시하고 즉시 모델 해제(처리·로드 중이면 409). 트레이(tray.py)에서 사용.
 """
 
 import asyncio
@@ -123,6 +124,21 @@ def _diarizer():
         return _diar_pipeline
 
 
+def _release_memory() -> None:
+    """모델 참조를 끊은 뒤 호출 — 파이썬/torch 캐시와 프로세스 working set 을 OS 에 돌려준다."""
+    gc.collect()
+    if "torch" in sys.modules:
+        try:
+            sys.modules["torch"].cuda.empty_cache()
+        except Exception:  # noqa: BLE001 — CUDA 미초기화 등은 무시
+            pass
+    if sys.platform == "win32":
+        import ctypes
+
+        k32 = ctypes.windll.kernel32
+        k32.SetProcessWorkingSetSize(k32.GetCurrentProcess(), ctypes.c_size_t(-1), ctypes.c_size_t(-1))
+
+
 def _unload_if_idle():
     global _model, _diar_pipeline
     with _lock:
@@ -135,8 +151,32 @@ def _unload_if_idle():
             return
         _model = None
         _diar_pipeline = None
-    gc.collect()
+    _release_memory()
     log.info("유휴 %.0f분 — 모델 해제(VRAM 반환)", idle / 60)
+
+
+def _process_memory() -> dict:
+    """현재 프로세스 메모리(MB) — working set(작업 관리자 '메모리') 과 private(커밋)."""
+    if sys.platform != "win32":
+        return {}
+    import ctypes
+    from ctypes import wintypes
+
+    class _PMC(ctypes.Structure):
+        _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+                    ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
+                    ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t), ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                    ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t),
+                    ("PrivateUsage", ctypes.c_size_t)]
+
+    pmc = _PMC()
+    pmc.cb = ctypes.sizeof(pmc)
+    psapi = ctypes.WinDLL("psapi")
+    psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(_PMC), wintypes.DWORD]
+    if not psapi.GetProcessMemoryInfo(ctypes.windll.kernel32.GetCurrentProcess(), ctypes.byref(pmc), pmc.cb):
+        return {}
+    return {"working_set_mb": round(pmc.WorkingSetSize / 2**20), "private_mb": round(pmc.PrivateUsage / 2**20)}
 
 
 async def _idle_watcher():
@@ -170,6 +210,10 @@ def health():
         "diarize_loaded": _diar_pipeline is not None,
         "warming": _warming,
         "caffeine_sec": max(0, round(_keep_until - time.monotonic())),
+        "active": _active,
+        "jobs_pending": sum(1 for j in list(_jobs.values()) if j["state"] in ("queued", "transcribing", "diarizing")),
+        "pid": os.getpid(),
+        **_process_memory(),
     }
 
 
@@ -200,6 +244,26 @@ def warmup():
         _warming = True
     threading.Thread(target=_warm, name="warmup", daemon=True).start()
     return {"started": True}
+
+
+@app.post("/sleep")
+def sleep_now():
+    """유휴 타이머·/caffeine 을 무시하고 즉시 모델 해제(트레이 'Sleep'). 처리 중·로드 중이면 거절."""
+    global _model, _diar_pipeline, _keep_until
+    with _flag_lock:
+        if _warming:
+            raise HTTPException(status_code=409, detail="모델 로드 중")
+        _keep_until = 0.0
+    with _lock:
+        if _active:
+            raise HTTPException(status_code=409, detail=f"처리 중인 요청 {_active}건")
+        was_loaded = _model is not None or _diar_pipeline is not None
+        _model = None
+        _diar_pipeline = None
+    if was_loaded:
+        _release_memory()
+        log.info("수동 sleep — 모델 해제(VRAM 반환)")
+    return {"unloaded": was_loaded, **_process_memory()}
 
 
 @app.post("/caffeine")
