@@ -138,3 +138,10 @@ class Scene(private val root: JSONObject) {
         private fun randomId(rnd: Random) = buildString { repeat(21) { append(ALPHABET[rnd.nextInt(ALPHABET.length)]) } }
     }
 }
+
+/** 쪽(page) 좌표 계산 — 쪽 N 은 장면 y ∈ [(N-1)·H, N·H). H = 서피스 높이(장면 단위 = px/density). Android 비의존. */
+object Pages {
+    fun offsetY(page: Int, h: Float): Float = (page - 1).coerceAtLeast(0) * h
+    /** 뷰(기기 px) 좌표 → 장면 좌표. */
+    fun toScene(viewPx: Float, density: Float, offset: Float): Float = viewPx / density + offset
+}

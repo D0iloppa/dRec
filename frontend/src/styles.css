@@ -262,6 +262,11 @@ button { font-family: inherit; cursor: pointer; }
   cursor: pointer;
 }
 .sketch-mode-btn.on { background: #000; color: #fff; border-color: #000; }
+/* 간단 그리기 | 도형 편집 세그먼트 — 활성 세그먼트는 검정 배경·흰 글씨 */
+.sketch-mode-seg { display: inline-flex; margin-right: auto; border: 1px solid #000; border-radius: 6px; overflow: hidden; }
+.sketch-seg-btn { height: 28px; padding: 0 12px; border: 0; border-radius: 0; background: transparent; color: #000; font-size: 12px; cursor: pointer; }
+.sketch-seg-btn + .sketch-seg-btn { border-left: 1px solid #000; }
+.sketch-seg-btn.on { background: #000; color: #fff; }
 .sketch-loading-inline { padding: 24px; color: var(--text-dim); font-size: 13px; }
 .ink-wrap { display: flex; flex-direction: column; height: 100%; background: #fff; }
 .ink-bar {
@@ -813,7 +818,8 @@ span.skel { display: inline-block; height: 12px; }
 .pipe-steps li.cur.err .pipe-dot { border-color: var(--danger); color: var(--danger); }
 .sketch-native-btn { margin-right: auto; height: 44px; padding: 0 18px; font-size: 15px; font-weight: 600; border: 2px solid #000; border-radius: 0; color: #000; }
 .sketch-native-btn:disabled { opacity: .5; }
-.sketch-mode-btn:has(+ .sketch-native-btn) { margin-right: 8px; }
+.sketch-mode-seg:has(+ .sketch-native-btn) { margin-right: 8px; }
+.sketch-inline-placeholder { width: 100%; height: 100%; min-height: 200px; background: #fff; }
 
 /* ── 녹음 유실 재발방지(2026-10-29): 마이크 끊김 경고 · 전송 대기 · 미완료 녹음 복구 배너 ── */
 .mic-alert {

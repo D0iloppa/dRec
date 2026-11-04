@@ -72,4 +72,18 @@ class SceneTest {
     }
 
     @Test(expected = Exception::class) fun corruptCanvasDataThrows() { Scene.parse("{not json") }
+
+    @Test fun pageOffsetAndViewToScene() {
+        assertEquals(0f, Pages.offsetY(1, 600f), 0f)
+        assertEquals(600f, Pages.offsetY(2, 600f), 0f)
+        assertEquals(1200f, Pages.offsetY(3, 600f), 0f)
+        assertEquals(150f + 600f, Pages.toScene(300f, 2f, Pages.offsetY(2, 600f)), 0f) // px 300 @2x → 150
+    }
+
+    @Test fun strokeCommittedOnPage2StartsAtOrBelowH() {
+        val h = 600f; val off = Pages.offsetY(2, h)
+        val y0 = Pages.toScene(0f, 2f, off); val y1 = Pages.toScene(100f, 2f, off)
+        val el = Scene.newFreedraw(floatArrayOf(10f, y0, 20f, y1), floatArrayOf(0.5f, 0.5f), 2f)
+        assertTrue(el.getDouble("y") >= h)
+    }
 }

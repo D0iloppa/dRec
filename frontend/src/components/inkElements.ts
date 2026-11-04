@@ -60,7 +60,12 @@ export function readInkMode(): boolean {
     if (q === '1') return true;
     if (q === '0') return false;
   } catch { /* noop */ }
-  try { return localStorage.getItem(KEY) === '1'; } catch { return false; }
+  // 앱(DrecInk 브리지) 안에서는 저장값이 없으면 가벼운 웹 펜을 기본으로 한다
+  const appDefault = !!(window as { DrecInk?: unknown }).DrecInk;
+  try {
+    const v = localStorage.getItem(KEY);
+    return v === null ? appDefault : v === '1';
+  } catch { return appDefault; }
 }
 
 export function writeInkMode(on: boolean) {

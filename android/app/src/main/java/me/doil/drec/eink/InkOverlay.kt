@@ -30,7 +30,7 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 /**
- * WebView 위에 얹는 전체화면 잉크 오버레이 (같은 Activity — 페이지의 녹음이 끊기지 않게).
+ * WebView 위에 얹는 잉크 오버레이(전체화면, 또는 inline=true 면 호출자가 정한 rect 만 덮는 패널) (같은 Activity — 페이지의 녹음이 끊기지 않게).
  * Boox: Onyx Pen SDK raw drawing(EPD 저지연). 그 외: MotionEvent 캔버스 폴백.
  * onClosed 는 최종 저장이 끝난(또는 실패를 알린) 뒤 메인 스레드에서 1회 호출된다.
  */
@@ -38,9 +38,11 @@ class InkOverlay(
     context: Context,
     private val meetingId: Int,
     private val token: String,
+    private val inline: Boolean = false,
     private val onClosed: () -> Unit,
 ) : FrameLayout(context) {
 
+    val isInline get() = inline
     private val main = Handler(Looper.getMainLooper())
     private val io: ExecutorService = Executors.newSingleThreadExecutor()
     private val density = resources.displayMetrics.density
@@ -69,18 +71,21 @@ class InkOverlay(
     private var rawFail: String? = null
     // 비-Boox 에서 TouchHelper 가 예외 없이 열려도 입력이 안 올 수 있으니, 첫 raw 점 전에는 MotionEvent 도 허용
     private val onyxActive get() = touchHelper != null && (onyxLike || rawSeen)
-    private lateinit var modeLabel: TextView
 
     private lateinit var penBtn: TextView
     private lateinit var eraserBtn: TextView
     private lateinit var widthBtn: TextView
+    private lateinit var prevBtn: TextView
+    private lateinit var nextBtn: TextView
+    private lateinit var pageLabel: TextView
+    private var page = lastPage[meetingId] ?: 1   // 1-based. 메모리에만 기억(앱 세션 동안)
     private lateinit var status: TextView
 
     init {
         setBackgroundColor(Color.WHITE)
         isClickable = true // 아래 WebView 로 터치가 새지 않게
         val col = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        col.addView(buildToolbar(), LayoutParams(LayoutParams.MATCH_PARENT, dp(64)))
+        col.addView(buildToolbar(), LayoutParams(LayoutParams.MATCH_PARENT, dp(if (inline) 44 else 64)))
         col.addView(surface, LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f))
         addView(col, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         status = TextView(context).apply { text = "불러오는 중..."; textSize = 20f; setTextColor(Color.BLACK) }
@@ -110,37 +115,54 @@ class InkOverlay(
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(Color.WHITE)
         }
-        fun btn(label: String, onClick: () -> Unit) = TextView(context).apply {
-            text = label; textSize = 20f; gravity = Gravity.CENTER
-            minWidth = dp(96); setPadding(dp(16), 0, dp(16), 0)
-            setOnClickListener { if (!closing) onClick() }
-            bar.addView(this, LinearLayout.LayoutParams(0, LayoutParams.MATCH_PARENT, 1f).apply { setMargins(dp(2), dp(2), dp(2), dp(2)) })
+        val hp = if (inline) 3 else 14
+        fun label(label: String, weight: Float, onClick: (() -> Unit)?) = TextView(context).apply {
+            text = label; textSize = if (inline) 13f else 20f; gravity = Gravity.CENTER; maxLines = 1
+            setPadding(dp(hp), 0, dp(hp), 0)
+            if (onClick != null) setOnClickListener { if (!closing) onClick() }
+            bar.addView(this, LinearLayout.LayoutParams(0, LayoutParams.MATCH_PARENT, weight).apply { setMargins(dp(2), dp(2), dp(2), dp(2)) })
         }
-        penBtn = btn("펜") { tool = Tool.PEN; refreshButtons(); applyRawState() }
-        eraserBtn = btn("지우개") { tool = Tool.ERASER; refreshButtons(); applyRawState() }
-        btn("실행취소") { if (scene?.undo() == true) { changed(); redraw() } }
-        widthBtn = btn("굵기") { widthIdx = (widthIdx + 1) % widths.size; refreshButtons(); applyStrokeWidth() }
-        btn("닫기") { close() }
-        modeLabel = TextView(context).apply { textSize = 12f; gravity = Gravity.CENTER; setTextColor(Color.BLACK); text = "..." }
-        bar.addView(modeLabel, LinearLayout.LayoutParams(dp(130), LayoutParams.MATCH_PARENT))
+        penBtn = label("펜", 1f) { tool = Tool.PEN; refreshButtons(); applyRawState() }
+        eraserBtn = label("지우개", 1f) { tool = Tool.ERASER; refreshButtons(); applyRawState() }
+        label("되돌리기", 1f) { if (scene?.undo() == true) { changed(); redraw() } }
+        widthBtn = label("굵게", 1f) { widthIdx = (widthIdx + 1) % widths.size; refreshButtons(); applyStrokeWidth() }
+        prevBtn = label("◀ 이전", 1f) { if (page > 1) setPage(page - 1) }
+        pageLabel = label("", 0.6f, null)
+        nextBtn = label("다음 ▶", 1f) { setPage(page + 1) }
+        label("완료", 1f) { close() }
         refreshButtons()
         return bar
     }
 
-    private fun refreshButtons() {
-        fun style(v: TextView, on: Boolean) {
-            v.setTextColor(if (on) Color.WHITE else Color.BLACK)
-            v.background = GradientDrawable().apply {
-                setColor(if (on) Color.BLACK else Color.WHITE); setStroke(dp(2), Color.BLACK)
-            }
-        }
-        style(penBtn, tool == Tool.PEN); style(eraserBtn, tool == Tool.ERASER)
-        widthBtn.text = if (widthIdx == 0) "굵기: 가늘게" else "굵기: 굵게"
-        for (i in 0 until (penBtn.parent as LinearLayout).childCount) {
-            val v = (penBtn.parent as LinearLayout).getChildAt(i) as TextView
-            if (v !== penBtn && v !== eraserBtn && v !== modeLabel) style(v, false)
+    /** 검정 반전(on) / 흰 바탕+테두리(off) / 비활성(회색 글자·회색 테두리). 평면, 애니메이션 없음. */
+    private fun style(v: TextView, on: Boolean, enabled: Boolean = true) {
+        v.setTextColor(if (!enabled) Color.GRAY else if (on) Color.WHITE else Color.BLACK)
+        v.background = GradientDrawable().apply {
+            setColor(if (on) Color.BLACK else Color.WHITE); setStroke(dp(2), if (enabled) Color.BLACK else Color.LTGRAY)
         }
     }
+
+    private fun refreshButtons() {
+        val bar = penBtn.parent as LinearLayout
+        for (i in 0 until bar.childCount) style(bar.getChildAt(i) as TextView, false)
+        style(penBtn, tool == Tool.PEN); style(eraserBtn, tool == Tool.ERASER)
+        style(widthBtn, widthIdx == 1)
+        style(prevBtn, false, page > 1)
+        pageLabel.text = "${page}쪽"; pageLabel.background = null; pageLabel.setTextColor(Color.BLACK)
+    }
+
+    /** 쪽 넘김: 저장할 것 없음(획은 이미 장면에 있음). 비트맵 1회 전체 재그림 — redraw() 가 raw drawing 을 껐다 켠다. */
+    private fun setPage(n: Int) {
+        if (n < 1 || n == page || closing) return
+        page = n
+        lastPage[meetingId] = n
+        cur.clear(); curP.clear()
+        refreshButtons()
+        redraw()
+    }
+
+    /** 현재 쪽의 장면 y 오프셋. H = 서피스 높이 / density. */
+    private fun pageOffsetY(): Float = Pages.offsetY(page, surface.height / density)
 
     // ---------- surface / rendering ----------
     private fun onSurfaceSized(w: Int, h: Int) {
@@ -156,6 +178,7 @@ class InkOverlay(
     private fun redraw() {
         val c = bmpCanvas ?: return
         val s = scene
+        renderer.panY = pageOffsetY()
         val wasRaw = onyxActive && rawWanted()
         if (wasRaw) touchHelper?.setRawDrawingEnabled(false)
         if (s != null) renderer.drawAll(c, s) else c.drawColor(Color.WHITE)
@@ -177,32 +200,24 @@ class InkOverlay(
         try {
             val limit = Rect()
             surface.getLocalVisibleRect(limit)
-            if (limit.isEmpty) { Log.w(TAG, "limitRect empty, skip"); return }
+            if (limit.isEmpty) return
             var helper = touchHelper
             if (helper == null) {
                 helper = TouchHelper.create(surface, rawCallback)
-                Log.i(TAG, "TouchHelper.create ok (mfr=${Build.MANUFACTURER} brand=${Build.BRAND})")
                 helper.setStrokeWidth(widths[widthIdx] * density).setStrokeColor(Color.BLACK)
                 helper.setLimitRect(limit, emptyList<Rect>())
-                Log.i(TAG, "setLimitRect $limit")
                 helper.openRawDrawing()
-                Log.i(TAG, "openRawDrawing ok")
                 helper.setRawDrawingRenderEnabled(true) // EPD 가 펜 선을 직접 그린다 (앱은 종료 후 비트맵에만 반영)
                 touchHelper = helper
             } else {
                 helper.setLimitRect(limit, emptyList<Rect>()) // 크기 변경 시 rect 만 갱신 (재생성 없음)
-                Log.i(TAG, "setLimitRect(update) $limit")
             }
-            setMode("RAW" + if (rawSeen) "" else "?")
         } catch (t: Throwable) {
             Log.e(TAG, "raw drawing unavailable", t)
             try { touchHelper?.closeRawDrawing() } catch (_: Throwable) {}
             touchHelper = null // SDK 사용 불가 → MotionEvent 폴백
-            setMode("FALLBACK: ${t.javaClass.simpleName}")
         }
     }
-
-    private fun setMode(m: String) { Log.i(TAG, "mode=$m"); modeLabel.text = m }
 
     private fun closeRaw() {
         try { touchHelper?.closeRawDrawing() } catch (_: Throwable) {}
@@ -214,7 +229,6 @@ class InkOverlay(
     private fun applyRawState() {
         try {
             touchHelper?.setRawDrawingEnabled(rawWanted())
-            if (touchHelper != null) Log.i(TAG, "setRawDrawingEnabled(${rawWanted()})")
         } catch (t: Throwable) { Log.e(TAG, "setRawDrawingEnabled", t) }
     }
 
@@ -228,11 +242,11 @@ class InkOverlay(
 
     // SDK 콜백은 비 UI 스레드 — 메인으로 넘긴다.
     private val rawCallback = object : RawInputCallback() {
-        override fun onBeginRawDrawing(b: Boolean, p: TouchPoint) { if (!rawSeen) Log.i(TAG, "first raw begin") }
+        override fun onBeginRawDrawing(b: Boolean, p: TouchPoint) {}
         override fun onEndRawDrawing(b: Boolean, p: TouchPoint) {}
         override fun onRawDrawingTouchPointMoveReceived(p: TouchPoint) {}
         override fun onRawDrawingTouchPointListReceived(list: TouchPointList) {
-            if (!rawSeen) { rawSeen = true; Log.i(TAG, "first raw stroke received"); main.post { setMode("RAW") } }
+            rawSeen = true
             val n = list.size()
             val xy = FloatArray(n * 2); val pr = FloatArray(n)
             for (i in 0 until n) {
@@ -297,17 +311,18 @@ class InkOverlay(
     private fun commitStroke(xy: FloatArray, pressure: FloatArray, drawNow: Boolean) {
         val s = scene ?: return
         if (xy.size < 2) return
-        val pts = FloatArray(xy.size) { i -> xy[i] / density + if (i % 2 == 0) renderer.panX else renderer.panY }
+        val off = pageOffsetY()
+        val pts = FloatArray(xy.size) { i -> Pages.toScene(xy[i], density, if (i % 2 == 0) renderer.panX else off) }
         val el = Scene.newFreedraw(pts, pressure, widths[widthIdx])
         s.add(el)
-        bmpCanvas?.let { renderer.drawElement(it, el) } // 비트맵에도 반영 (EPD 는 이미 그렸음)
+        bmpCanvas?.let { renderer.panY = off; renderer.drawElement(it, el) } // 비트맵에도 반영 (EPD 는 이미 그렸음)
         if (drawNow) blit()
         changed()
     }
 
     private fun eraseAt(sx: Float, sy: Float) {
         val s = scene ?: return
-        val x = sx / density + renderer.panX; val y = sy / density + renderer.panY
+        val x = Pages.toScene(sx, density, renderer.panX); val y = Pages.toScene(sy, density, pageOffsetY())
         var hit = false
         for (el in s.liveFreedraws()) if (Scene.hitsFreedraw(el, x, y, ERASE_RADIUS)) { s.erase(el); hit = true }
         if (hit) { changed(); redraw() }
@@ -374,11 +389,17 @@ class InkOverlay(
         io.shutdown() // 대기 중 작업은 끝까지 실행
     }
 
+    /** inline: 위치/크기가 바뀐 뒤 호출 — 레이아웃이 끝난 다음 Onyx limit rect 갱신 + 비트맵 1회 재그림. */
+    fun onRectChanged() = post { if (surfaceReady) { openRaw(); redraw() } }
+
     fun onPause() { try { touchHelper?.setRawDrawingEnabled(false) } catch (_: Throwable) {} }
     fun onResume() { redraw(); applyRawState() }
 
     private fun toast(msg: String) = Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
     private fun dp(v: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
 
-    companion object { private const val TAG = "DrecInk"; private const val ERASE_RADIUS = 10f } // 장면 px
+    companion object {
+        private val lastPage = HashMap<Int, Int>() // meetingId → 마지막 쪽 (메모리만)
+        private const val TAG = "DrecInk"; private const val ERASE_RADIUS = 10f // 장면 px
+    }
 }

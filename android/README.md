@@ -35,8 +35,16 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 
 - 웹 → 앱: `window.DrecInk.open(meetingId: number, token: string)`
   - 토큰은 `Authorization: Bearer <token>` 으로 캔버스 API 에 쓰인다. `drec.doil.me` 페이지에서 온 호출만 처리.
+- 웹 → 앱(인라인): `DrecInk.openInline(meetingId, token, x, y, w, h)` — rect 는 CSS px(getBoundingClientRect, WebView
+  뷰포트 기준). 앱이 `× displayMetrics.density`(페이지 viewport 가 줌 불가라 WebView 스케일과 동일)로 변환해 그 영역만
+  덮는 오버레이를 띄우고 나머지 WebView 는 계속 보이고 터치된다. 이미 오버레이가 열려 있으면 무시(먼저 close).
+- `DrecInk.updateRect(x, y, w, h)` — 인라인 오버레이 위치/크기 갱신(Onyx limit rect 도 레이아웃 후 갱신).
+- `DrecInk.close()` — 열려 있는 오버레이(전체/인라인) 저장 후 닫기 → 아래 이벤트 발생.
 - 앱 → 웹: 오버레이가 닫히고 최종 저장이 끝나면(또는 실패 알림 후)
   `window.dispatchEvent(new CustomEvent('drec-ink-closed', { detail: { meetingId } }))`
+- 툴바: `[펜] [지우개] [되돌리기] [굵게]  [◀ 이전] N쪽 [다음 ▶]  [완료]`. 스크롤 없이 쪽 넘김만: N쪽 = 장면 y ∈
+  [(N-1)·H, N·H) (H = 그리는 영역 높이 ÷ density), x 는 0 고정. 다음은 항상 새 빈 쪽. 마지막 쪽은 회의별로
+  앱 실행 동안만 메모리에 기억(저장 안 함). 완료 = 저장 후 닫기(`drec-ink-closed`).
 - 데이터: `GET/PUT /api/meetings/{id}/canvas` — 기존 요소는 원본 JSON 그대로 보존, 새 획은 Excalidraw
   `freedraw` 로 추가, 지우개/실행취소는 `isDeleted` + `version` 증가(요소를 배열에서 제거하지 않음).
   불러오기에 실패하면 편집/저장을 막는다(빈 캔버스로 덮어쓰기 방지).

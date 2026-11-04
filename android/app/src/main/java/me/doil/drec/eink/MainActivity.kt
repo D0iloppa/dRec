@@ -80,6 +80,46 @@ class MainActivity : Activity() {
                 root.addView(ov, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             }
         }
+
+        /** rect: CSS px (getBoundingClientRect, WebView 뷰포트 기준). 이미 열려 있으면 무시. */
+        @JavascriptInterface
+        fun openInline(meetingId: Int, token: String, x: Float, y: Float, w: Float, h: Float) {
+            runOnUiThread {
+                if (Uri.parse(web.url ?: "").host != HOST) return@runOnUiThread
+                if (overlay != null || meetingId <= 0 || token.isBlank() || w <= 0f || h <= 0f) return@runOnUiThread
+                val ov = InkOverlay(this@MainActivity, meetingId, token, inline = true) { closeOverlay(meetingId) }
+                overlay = ov
+                root.addView(ov, inlineParams(x, y, w, h))
+            }
+        }
+
+        @JavascriptInterface
+        fun updateRect(x: Float, y: Float, w: Float, h: Float) {
+            runOnUiThread {
+                val ov = overlay ?: return@runOnUiThread
+                if (!ov.isInline || w <= 0f || h <= 0f) return@runOnUiThread
+                ov.layoutParams = inlineParams(x, y, w, h)
+                ov.onRectChanged()
+            }
+        }
+
+        @JavascriptInterface
+        fun close() { runOnUiThread { overlay?.close() } }
+    }
+
+    /**
+     * CSS px → 기기 px. 페이지가 width=device-width, initial-scale=1, user-scalable=no 라 줌이 없으므로
+     * WebView 스케일 = displayMetrics.density (WebView.getScale 은 deprecated). 페이지가 줌 가능해지면 재검토.
+     * WebView 의 root 내 오프셋은 getLocationInWindow 차이로 더한다.
+     */
+    private fun inlineParams(x: Float, y: Float, w: Float, h: Float): FrameLayout.LayoutParams {
+        val d = resources.displayMetrics.density
+        val a = IntArray(2); val b = IntArray(2)
+        web.getLocationInWindow(a); root.getLocationInWindow(b)
+        return FrameLayout.LayoutParams(Math.round(w * d), Math.round(h * d)).apply {
+            leftMargin = Math.round(x * d) + a[0] - b[0]
+            topMargin = Math.round(y * d) + a[1] - b[1]
+        }
     }
 
     private fun closeOverlay(meetingId: Int) {
