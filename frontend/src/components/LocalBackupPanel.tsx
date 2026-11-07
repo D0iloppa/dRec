@@ -1,17 +1,17 @@
-// 회의 상세의 "이 기기의 녹음 백업" 패널 — 업로드 결과(서버 녹음 길이)를 로컬 원본과 비교해 보고,
+// 회의 상세의 "이 기기의 녹음 백업" 카드 — 업로드 결과(서버 녹음 길이)를 로컬 원본과 비교해 보고,
 // 사용자가 승인해야만 백업을 지운다(자동 삭제 없음). 재생 / 파일로 저장(iOS 공유 시트) / 백업으로 다시 업로드.
+// 전체 백업 목록·일괄 정리는 백업 관리 페이지(/backups).
 import { useEffect, useMemo, useState } from 'react';
-import { HardDrive, Play, Download, Upload, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { HardDrive, Play, Download, Upload, CheckCircle2, AlertTriangle, ChevronRight, X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
-  isPendingReview, listLocal, loadFull, localRec, LocalSummary, matchesMeeting, probeDuration, purgeLocal, saveBlobs,
+  isPendingReview, listLocal, loadFull, localRec, LocalSummary, matchesMeeting, probeDuration, saveBlobs,
   useLocalRec,
 } from '../localRec';
 import { useUploader } from '../uploader';
 import { dialog } from '../ui/dialog';
-import { fmtBytes, fmtDuration } from './format';
-
-const MISMATCH_RATIO = 0.95; // 서버 길이가 로컬의 95% 미만이면 경고
+import { approveAndPurge, BackupCompare, purgeIncomplete, REUPLOAD_CONFIRM, StateBadge, verdict } from './backupCommon';
 
 interface Props {
   meetingId: number;
@@ -66,16 +66,11 @@ export default function LocalBackupPanel({ meetingId, serverDurationSec, serverH
   if (!meta) return null;
 
   // 측정 실패 시 녹음 화면이 기록한 시간으로 대체(≈)
-  const approx = localSec == null && meta.recordedMs ? meta.recordedMs / 1000 : null;
-  const localDur = localSec ?? approx;
+  const approxSec = localSec == null && meta.recordedMs ? meta.recordedMs / 1000 : null;
+  const localDur = localSec ?? approxSec;
   const serverDur = serverHasAudio ? serverDurationSec ?? null : null;
   const uploadBusy = upload?.phase === 'uploading' || upload?.phase === 'converting';
-  let warn = '';
-  if (uploadBusy) warn = ''; // 업로드 중에는 서버 길이가 아직 없다
-  else if (!serverHasAudio) warn = '서버에 원본 녹음이 없습니다. 백업으로 다시 업로드하세요.';
-  else if (localDur && serverDur != null && serverDur < localDur * MISMATCH_RATIO) {
-    warn = `서버 녹음(${fmtDuration(serverDur)})이 기기 백업(${fmtDuration(localDur)})보다 ${Math.round((1 - serverDur / localDur) * 100)}% 짧습니다. 업로드·조립 중 일부가 빠졌을 수 있습니다.`;
-  }
+  const { kind, warn } = verdict(localDur, serverDur, serverHasAudio, uploadBusy);
   const pending = isPendingReview(meta);
 
   async function save() {
@@ -86,59 +81,30 @@ export default function LocalBackupPanel({ meetingId, serverDurationSec, serverH
 
   async function reupload() {
     if (!meta || !blobs?.length) return;
-    const ok = await dialog.confirm(
-      '기기 백업으로 다시 업로드할까요?',
-      '서버의 원본 녹음을 이 백업으로 교체하고 전사·화자 분리를 다시 실행합니다. 백업은 그대로 남습니다.',
-      '다시 업로드',
-    );
-    if (ok) useUploader.getState().start(meetingId, blobs, { localId: meta.id });
-  }
-
-  async function approve() {
-    if (!meta) return;
-    if (warn) {
-      const again = await dialog.confirm('길이 불일치 경고가 있습니다', `${warn}\n그래도 승인하고 백업을 삭제하면 기기의 원본을 되살릴 수 없습니다.`, '그래도 진행');
-      if (!again) return;
+    if (await dialog.confirm(REUPLOAD_CONFIRM.title, REUPLOAD_CONFIRM.text, REUPLOAD_CONFIRM.ok)) {
+      useUploader.getState().start(meetingId, blobs, { localId: meta.id });
     }
-    const ok = await dialog.confirm(
-      '업로드 완료를 승인하고 백업을 삭제할까요?',
-      '서버의 녹음·전사 결과를 확인했다면 승인하세요. 삭제 후에는 되돌릴 수 없습니다. 필요하면 먼저 "파일로 저장"하세요.',
-      '승인하고 삭제',
-    );
-    if (ok) { await purgeLocal(meta.id); toast.success('기기 백업을 삭제했습니다'); }
-  }
-
-  async function removeIncomplete() {
-    if (!meta) return;
-    const ok = await dialog.confirm('업로드되지 않은 백업입니다', '삭제하면 이 녹음의 원본을 되살릴 수 없습니다. 정말 삭제할까요?', '삭제');
-    if (ok) await purgeLocal(meta.id);
   }
 
   return (
-    <div className={`backup-panel${warn ? ' warn' : ''}`}>
-      <div className="backup-head">
-        <HardDrive size={16} /> 이 기기의 녹음 백업
-        <span className={`backup-state${pending ? ' review' : ' incomplete'}`}>{pending ? '검토 대기' : '업로드 미완료'}</span>
-      </div>
-      <div className="backup-compare">
-        <div>
-          <div className="backup-k">기기 백업</div>
-          <div className="backup-v">
-            {measuring && localDur == null ? '측정 중…' : localDur != null ? `${approx != null ? '≈ ' : ''}${fmtDuration(localDur)}` : '길이 알 수 없음'}
-            <span className="backup-sub"> · {fmtBytes(meta.fullBytes)}{meta.gens > 1 ? ` · ${meta.gens}구간` : ''}</span>
-          </div>
-        </div>
-        <div>
-          <div className="backup-k">서버 녹음</div>
-          <div className="backup-v">{serverDur != null ? fmtDuration(serverDur) : serverHasAudio ? '길이 미확인' : '없음'}</div>
-        </div>
-      </div>
-      {warn && <div className="backup-warn"><AlertTriangle size={14} /> {warn}</div>}
+    <section className={`bk-card${warn ? ' warn' : ''}`}>
+      <header className="bk-head">
+        <HardDrive size={16} />
+        <span className="bk-title">이 기기의 녹음 백업</span>
+        <StateBadge meta={meta} />
+        <Link className="bk-link" to="/backups">백업 관리 <ChevronRight size={13} /></Link>
+      </header>
+
+      <BackupCompare
+        meta={meta} localDur={localDur} approx={approxSec != null && localSec == null} measuring={measuring}
+        serverDur={serverDur} serverHasAudio={serverHasAudio} kind={kind}
+      />
+      {warn && <div className="bk-warn"><AlertTriangle size={14} /> <span>{warn}</span></div>}
 
       {playIdx !== null && urls[playIdx] && (
-        <div className="backup-player">
+        <div className="bk-player">
           {urls.length > 1 && (
-            <div className="backup-gens">
+            <div className="bk-gens">
               {urls.map((_, i) => (
                 <button key={i} className={i === playIdx ? 'on' : ''} onClick={() => setPlayIdx(i)}>구간 {i + 1}</button>
               ))}
@@ -148,19 +114,21 @@ export default function LocalBackupPanel({ meetingId, serverDurationSec, serverH
         </div>
       )}
 
-      <div className="backup-actions">
+      {pending ? (
+        <button className={`bk-primary${warn ? ' risky' : ''}`} onClick={() => void approveAndPurge(meta, warn)} disabled={uploadBusy}>
+          {warn ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />} 업로드 완료 승인 → 백업 삭제
+        </button>
+      ) : (
+        <button className="bk-primary danger" onClick={() => void purgeIncomplete(meta)} disabled={uploadBusy}>
+          <X size={16} /> 백업 삭제
+        </button>
+      )}
+      <div className="bk-actions">
         <button onClick={() => setPlayIdx(playIdx === null ? 0 : null)} disabled={!urls.length}><Play size={14} /> {playIdx === null ? '백업 재생' : '재생 닫기'}</button>
         <button onClick={save} disabled={!blobs?.length}><Download size={14} /> 파일로 저장</button>
-        <button onClick={reupload} disabled={!blobs?.length || uploadBusy}><Upload size={14} /> {uploadBusy ? '업로드 중…' : '백업으로 다시 업로드'}</button>
-        {pending ? (
-          <button className={`approve${warn ? ' risky' : ''}`} onClick={approve} disabled={uploadBusy}>
-            {warn ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />} 업로드 완료 승인 → 백업 삭제
-          </button>
-        ) : (
-          <button className="danger" onClick={removeIncomplete} disabled={uploadBusy}>백업 삭제</button>
-        )}
+        <button onClick={reupload} disabled={!blobs?.length || uploadBusy}><Upload size={14} /> {uploadBusy ? '업로드 중…' : '다시 업로드'}</button>
       </div>
-      <div className="backup-hint">백업은 승인하기 전까지 자동으로 지워지지 않습니다.</div>
-    </div>
+      <div className="bk-note">백업은 승인하기 전까지 자동으로 지워지지 않습니다.</div>
+    </section>
   );
 }

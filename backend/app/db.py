@@ -4,7 +4,7 @@ import os
 import uuid as _uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import String, Text, DateTime, Integer, Float, ForeignKey, func, select, text
+from sqlalchemy import Boolean, String, Text, DateTime, Integer, Float, ForeignKey, func, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine, AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -71,6 +71,8 @@ class Meeting(Base):
     audio_duration_sec: Mapped[float | None] = mapped_column(Float, nullable=True)
     # 일시정지 체크포인트 JSON: {"stage": "prepare|transcribe|diarize|minutes", "transcript": [[start,end,text],…]?}
     checkpoint: Mapped[str] = mapped_column(Text, default="")
+    # 화자 분리 수행 여부(False = 전사만으로 회의록 생성). 시작 시 선택하거나 진행 중 '건너뛰기'로 바뀐다.
+    diarize: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
 class MeetingChunk(Base):
@@ -118,6 +120,7 @@ async def init_db() -> None:
             "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS stage_started_at TIMESTAMP",
             "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS audio_duration_sec REAL",
             "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS checkpoint TEXT DEFAULT ''",
+            "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS diarize BOOLEAN DEFAULT TRUE",
         ]:
             await conn.execute(text(stmt))
 
@@ -148,10 +151,11 @@ def _utcnow() -> datetime:
 
 
 async def set_stage(meeting_id: int, stage: str, progress: float | None = None) -> None:
-    """stage 전환 — stage_started_at 갱신, progress 초기화. 이벤트 루프에서 await 로 호출."""
+    """stage 전환 — stage_started_at 갱신, progress 초기화. 이벤트 루프에서 await 로 호출.
+    status 가 processing 이 아니면(취소·일시정지가 먼저 반영됨) 늦게 도착한 쓰기이므로 무시한다."""
     async with Session() as session:
         await session.execute(
-            text("UPDATE meetings SET stage=:s, progress=:p, stage_started_at=:t WHERE id=:id"),
+            text("UPDATE meetings SET stage=:s, progress=:p, stage_started_at=:t WHERE id=:id AND status='processing'"),
             {"s": stage, "p": progress, "t": _utcnow(), "id": meeting_id},
         )
         await session.commit()
@@ -161,7 +165,7 @@ async def set_progress(meeting_id: int, stage: str, progress: float | None) -> N
     """같은 stage 안의 진행률만 갱신. stage 가 이미 바뀌었으면(늦게 도착한 쓰기) 무시."""
     async with Session() as session:
         await session.execute(
-            text("UPDATE meetings SET progress=:p WHERE id=:id AND stage=:s"),
+            text("UPDATE meetings SET progress=:p WHERE id=:id AND stage=:s AND status='processing'"),
             {"p": progress, "id": meeting_id, "s": stage},
         )
         await session.commit()

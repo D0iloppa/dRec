@@ -4,6 +4,7 @@ import Layout from './components/Layout';
 import Record from './pages/Record';
 import MeetingView from './pages/MeetingView';
 import Login from './pages/Login';
+import Backups from './pages/Backups';
 import { AUTH_EVENT, getStoredToken } from './api';
 
 export default function App() {
@@ -22,6 +23,7 @@ export default function App() {
       <Route element={<Layout />}>
         <Route path="/" element={<Record />} />
         <Route path="/m/:id" element={<MeetingView />} />
+        <Route path="/backups" element={<Backups />} />
       </Route>
     </Routes>
   );

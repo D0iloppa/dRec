@@ -4,6 +4,7 @@ import { Mic, Square, Pause, Play, AlertTriangle, RefreshCw } from 'lucide-react
 import { api, SseEvent } from '../api';
 import { useMeetings } from '../store';
 import { useUploader } from '../uploader';
+import { usePrefs } from '../prefs';
 import { dialog } from '../ui/dialog';
 import { diag, flushDiag } from '../diag';
 import { appendFull, beginLocal, enqueueSlice, kickQueue, localRec, setLocalTitle, setRecordedMs, useLocalRec } from '../localRec';
@@ -86,6 +87,8 @@ function localNotify(meetingId: number, body: string, title = '녹음이 중단�
 export default function Record() {
   const [status, setStatus] = useState<Status>('idle');
   const [busy, setBusy] = useState(false);
+  const diarize = usePrefs((s) => s.diarize);
+  const setDiarize = usePrefs((s) => s.setDiarize);
   const [liveSegs, setLiveSegs] = useState<LiveSeg[]>([]);
   const [elapsedMs, setElapsedMs] = useState(0);
   // 타이머 표시 상태: ok=데이터 수신 확인, checking=새 구간에서 아직 데이터 없음, stalled=데이터가 끊김
@@ -921,6 +924,9 @@ export default function Record() {
 
           {active && (
             <div className="rec-controls">
+              <label className="diarize-opt" title="끄면 전사만 하고 화자 분리는 건너뜁니다(빠름)">
+                <input type="checkbox" checked={diarize} onChange={(e) => setDiarize(e.target.checked)} /> 화자 분리
+              </label>
               {status === 'recording' && (
                 <button className="finish-btn pause-btn" onClick={requestPause} disabled={busy || pauseLocked} aria-label="일시정지">
                   <Pause size={14} /> 일시정지

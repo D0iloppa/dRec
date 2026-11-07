@@ -46,27 +46,43 @@ def _m4a_path(meeting_id: int) -> str:
     return os.path.join(_meeting_dir(meeting_id), "full.m4a")
 
 
-def _ffmpeg_atomic(src_args: list[str], dst: str, out_args: list[str]) -> None:
-    """ffmpeg 결과를 `dst.part` 로 쓴 뒤 rename — 쓰는 도중의 파일이 서빙/has_audio 로 노출되지 않게 한다."""
+def _ffmpeg_atomic(src_args: list[str], dst: str, out_args: list[str], ctl: "control.RunControl | None" = None) -> None:
+    """ffmpeg 결과를 `dst.part` 로 쓴 뒤 rename — 쓰는 도중의 파일이 서빙/has_audio 로 노출되지 않게 한다.
+    ctl 이 중단되면 ffmpeg 를 죽이고 Cancelled(부분 산출물 `.part` 는 finally 에서 삭제)."""
     tmp = dst + ".part"
     try:
-        subprocess.run(["ffmpeg", "-y", *src_args, *out_args, "-f", "webm" if dst.endswith(".webm") else "mp4", tmp],
-                       check=True, capture_output=True)
+        proc = subprocess.Popen(
+            ["ffmpeg", "-y", *src_args, *out_args, "-f", "webm" if dst.endswith(".webm") else "mp4", tmp],
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, start_new_session=True,
+        )
+        if ctl is not None:
+            ctl.proc = proc
+            if ctl.stop.is_set():  # request() 가 proc 등록보다 먼저 온 경우
+                control.kill_proc(proc)
+        try:
+            _out, err = proc.communicate()
+        finally:
+            if ctl is not None:
+                ctl.proc = None
+        if ctl is not None and ctl.stop.is_set():
+            raise Cancelled()
+        if proc.returncode != 0:
+            raise subprocess.CalledProcessError(proc.returncode, proc.args, stderr=err)
         os.replace(tmp, dst)
     finally:
         if os.path.exists(tmp):
             os.unlink(tmp)
 
 
-def _make_full_webm(src_args: list[str], dst: str) -> None:
-    _ffmpeg_atomic(src_args, dst, ["-vn", "-c:a", "libopus"])
+def _make_full_webm(src_args: list[str], dst: str, ctl: "control.RunControl | None" = None) -> None:
+    _ffmpeg_atomic(src_args, dst, ["-vn", "-c:a", "libopus"], ctl)
 
 
-def _make_m4a(meeting_id: int) -> None:
+def _make_m4a(meeting_id: int, ctl: "control.RunControl | None" = None) -> None:
     dst = _m4a_path(meeting_id)
     if not os.path.isfile(dst):
         _ffmpeg_atomic(["-i", _full_audio_path(meeting_id)], dst,
-                       ["-vn", "-c:a", "aac", "-b:a", "64k", "-movflags", "+faststart"])
+                       ["-vn", "-c:a", "aac", "-b:a", "64k", "-movflags", "+faststart"], ctl)
 
 
 def _probe_duration(path: str) -> float | None:
@@ -143,12 +159,15 @@ class _ProgressReporter:
       늦게 도착해도 다음 stage 를 덮어쓰지 않는다.
     """
 
-    def __init__(self, meeting_id: int, loop: asyncio.AbstractEventLoop, stage: str = "transcribe"):
-        self.meeting_id, self.loop, self.stage = meeting_id, loop, stage
+    def __init__(self, meeting_id: int, loop: asyncio.AbstractEventLoop, stage: str = "transcribe",
+                 ctl: "control.RunControl | None" = None):
+        self.meeting_id, self.loop, self.stage, self.ctl = meeting_id, loop, stage, ctl
         self._last_p: float | None = None
         self._last_t = 0.0
 
     def __call__(self, stage: str, progress: float | None) -> None:
+        if self.ctl is not None and self.ctl.stop.is_set():  # 취소·일시정지 후 늦게 도착한 콜백은 기록하지 않는다
+            return
         try:
             if stage != self.stage:
                 prev = self.stage
@@ -464,17 +483,19 @@ async def upload_session_audio(meeting_id: int, audio: list[UploadFile] = File(.
 
 
 @app.post("/api/sessions/{meeting_id}/finish")
-async def finish_session(meeting_id: int, background_tasks: BackgroundTasks, user: str = Depends(current_user)):
-    """오디오 업로드 후 호출. 화자분리를 백그라운드에서 시작하고 즉시 리턴."""
+async def finish_session(meeting_id: int, background_tasks: BackgroundTasks, diarize: bool = True,
+                         user: str = Depends(current_user)):
+    """오디오 업로드 후 호출. 화자분리를 백그라운드에서 시작하고 즉시 리턴. diarize=false 면 전사만 하고 화자 분리는 생략."""
     async with Session() as session:
         m = await _owned(session, meeting_id, user)
         live_transcript = await _chunk_transcript(session, meeting_id)
         m.status = "processing"
+        m.diarize = diarize
         _mark_stage(m, "prepare")
         await session.commit()
     recwatch.forget(meeting_id)
 
-    background_tasks.add_task(_run_diarization, meeting_id, live_transcript)
+    background_tasks.add_task(_run_diarization, meeting_id, live_transcript, False, None, diarize)
     return {"id": meeting_id, "status": "processing"}
 
 
@@ -493,11 +514,14 @@ async def _apply_stop(meeting_id: int, action: str | None, transcript: list | No
     pause  → paused (stage 유지, checkpoint 저장: 전사 결과가 있으면 diarize 단계로 보존).
     cancel → 전사/화자분리면 uploaded(stage=cancelled, 오디오 유지), 회의록이면 transcribed(전사 유지).
     paused 에서의 취소도 같은 경로 — 어느 단계였는지는 checkpoint 로 판단한다.
+    이미 끝난/다른 상태(완료·오류 등)라면 아무것도 바꾸지 않는다(늦은 취소가 결과를 되돌리지 않게).
     """
     async with Session() as session:
         m = await session.get(Meeting, meeting_id)
         if not m:
             return None
+        if m.status not in ("processing", "processing_minutes", "paused"):
+            return m.status
         prev = json.loads(m.checkpoint) if m.checkpoint else {}
         is_minutes = m.status == "processing_minutes" or (m.status == "paused" and prev.get("stage") == "minutes")
         if action == "cancel":
@@ -508,6 +532,9 @@ async def _apply_stop(meeting_id: int, action: str | None, transcript: list | No
                 _mark_stage(m, "done")
             else:
                 m.status = "uploaded"
+                m.segments = ""  # 중간 산출물 정리(전사 재시작 시 어차피 새로 만든다)
+                m.named_transcript = ""
+                m.minutes = ""
                 _mark_stage(m, "cancelled")
         else:
             stage = "minutes" if is_minutes else ("diarize" if transcript else (m.stage or "prepare"))
@@ -524,10 +551,19 @@ async def _apply_stop(meeting_id: int, action: str | None, transcript: list | No
         return m.status
 
 
+async def _handle_cancelled(meeting_id: int, ctl: "control.RunControl") -> None:
+    """워커가 Cancelled 를 받은 뒤 정리. 취소는 요청 엔드포인트가 이미 즉시 반영했으므로(락 안) 여기선 일시정지만 반영한다."""
+    if ctl.action == "cancel":
+        return
+    async with ctl.lock:
+        await _apply_stop(meeting_id, ctl.action, ctl.transcript)
+
+
 async def _run_diarization(meeting_id: int, live_transcript: str, auto_minutes: bool = False,
-                           resume_transcript: list | None = None) -> None:
-    """백그라운드 실행기: 중단 제어(control) 등록 + 일시정지/취소 정리. 실제 작업은 _diarization_steps."""
+                           resume_transcript: list | None = None, diarize: bool = True) -> None:
+    """백그라운드 실행기: 중단 제어(control) 등록 + 일시정지 정리. 실제 작업은 _diarization_steps."""
     ctl = control.begin(meeting_id)
+    ctl.skip_diarize = not diarize
     try:
         async with Session() as session:  # 시작 전에 이미 일시정지/취소/삭제됐다면 실행하지 않는다
             m = await session.get(Meeting, meeting_id)
@@ -535,7 +571,7 @@ async def _run_diarization(meeting_id: int, live_transcript: str, auto_minutes: 
                 return
         await _diarization_steps(meeting_id, live_transcript, auto_minutes, resume_transcript, ctl)
     except Cancelled:
-        await _apply_stop(meeting_id, ctl.action, ctl.transcript)
+        await _handle_cancelled(meeting_id, ctl)
     finally:
         control.end(meeting_id, ctl)
 
@@ -563,9 +599,11 @@ async def _diarization_steps(meeting_id: int, live_transcript: str, auto_minutes
                 for c in chunks:
                     f.write(f"file '{os.path.abspath(c)}'\n")
             try:
-                await run_in_threadpool(_make_full_webm, ["-f", "concat", "-safe", "0", "-i", concat_list], full_audio)
+                await run_in_threadpool(_make_full_webm, ["-f", "concat", "-safe", "0", "-i", concat_list], full_audio, ctl)
                 await _save_duration(meeting_id)
                 print(f"[diarize] {len(chunks)}개 청크 → full audio concat 완료", flush=True)
+            except Cancelled:
+                raise
             except Exception as e:
                 print(f"[diarize] concat 실패: {e}", flush=True)
 
@@ -575,48 +613,52 @@ async def _diarization_steps(meeting_id: int, live_transcript: str, auto_minutes
                 have_dur = (await session.get(Meeting, meeting_id)).audio_duration_sec is not None
             if not have_dur:
                 await _save_duration(meeting_id)
-            await run_in_threadpool(_make_m4a, meeting_id)  # 재생용 경량본 — 실패해도 파이프라인 계속(webm 폴백)
+            await run_in_threadpool(_make_m4a, meeting_id, ctl)  # 재생용 경량본 — 실패해도 파이프라인 계속(webm 폴백)
+        except Cancelled:
+            raise
         except Exception as e:
             print(f"[diarize] m4a 생성 실패(무시): {e}", flush=True)
 
         ctl.check()
         first = "diarize" if resume_transcript else "transcribe"
         await set_stage(meeting_id, first, None if resume_transcript else 0.0)
-        reporter = _ProgressReporter(meeting_id, loop, first)
+        reporter = _ProgressReporter(meeting_id, loop, first, ctl)
         try:
             result = await run_in_threadpool(diarize, full_audio, "ko", reporter, ctl, resume_transcript)
             transcript = result["text"]
-            segments_json = json.dumps(result["segments"], ensure_ascii=False)
+            segments_json = json.dumps(result["segments"], ensure_ascii=False) if result["segments"] else ""
         except Cancelled:
             raise
         except Exception as e:
             print(f"[diarize] 실패 → 전체 전사 폴백: {e}", flush=True)
             await set_stage(meeting_id, "transcribe", None)
-            reporter = _ProgressReporter(meeting_id, loop)
+            reporter = _ProgressReporter(meeting_id, loop, "transcribe", ctl)
             try:
-                transcript = await run_in_threadpool(transcribe, full_audio, "ko", reporter)
+                transcript = await run_in_threadpool(transcribe, full_audio, "ko", reporter, ctl)
+            except Cancelled:
+                raise
             except Exception as e2:
                 print(f"[transcribe] 폴백도 실패: {e2}", flush=True)
-            ctl.check()  # 폴백 전사는 중도 취소 불가 — 끝난 뒤 결과를 버린다
 
-    ctl.check()
-
-    async with Session() as session:
-        m = await session.get(Meeting, meeting_id)
-        if not m:
-            return
-        if not transcript.strip():
-            m.status = "error"
-            _mark_stage(m, "error")
+    # 결과 기록은 취소 반영과 같은 락 안에서: 취소가 먼저면 여기서 버리고, 기록이 먼저면 취소가 그 뒤에 덮는다.
+    async with ctl.lock:
+        ctl.check()
+        async with Session() as session:
+            m = await session.get(Meeting, meeting_id)
+            if not m or m.status != "processing":  # 삭제됐거나 다른 경로가 상태를 바꿈 — 되살리지 않는다
+                return
+            if not transcript.strip():
+                m.status = "error"
+                _mark_stage(m, "error")
+                await session.commit()
+                push.notify_meeting(meeting_id, "error")
+                await _push_event(meeting_id, {"type": "error", "message": "전사 결과가 비었습니다"})
+                return
+            m.transcript = transcript
+            m.segments = segments_json
+            m.status = "transcribed"
+            _mark_stage(m, "done")
             await session.commit()
-            push.notify_meeting(meeting_id, "error")
-            await _push_event(meeting_id, {"type": "error", "message": "전사 결과가 비었습니다"})
-            return
-        m.transcript = transcript
-        m.segments = segments_json
-        m.status = "transcribed"
-        _mark_stage(m, "done")
-        await session.commit()
     push.notify_meeting(meeting_id, "diarize_done")
 
     segments = json.loads(segments_json) if segments_json else []
@@ -676,38 +718,45 @@ async def _run_minutes(meeting_id: int, transcript: str, segments: list, speaker
                 return
         named = await run_in_threadpool(make_named_transcript, transcript, segments, speaker_meta)
         minutes = await run_in_threadpool(make_minutes, named, 300, ctl)
-        ctl.check()
-        async with Session() as session:
-            m = await session.get(Meeting, meeting_id)
-            if not m:
-                return
-            m.named_transcript = named
-            m.minutes = minutes
-            m.status = "done"
-            _mark_stage(m, "done")
-            await session.commit()
+        async with ctl.lock:  # 결과 기록은 취소 반영과 같은 락 안에서(늦은 완료가 취소를 덮지 못함)
+            ctl.check()
+            async with Session() as session:
+                m = await session.get(Meeting, meeting_id)
+                if not m or m.status not in ("processing_minutes", "transcribed"):
+                    return
+                m.named_transcript = named
+                m.minutes = minutes
+                m.status = "done"
+                _mark_stage(m, "done")
+                await session.commit()
         push.notify_meeting(meeting_id, "done")
         await _push_event(meeting_id, {"type": "done"})
     except Cancelled:
-        await _apply_stop(meeting_id, ctl.action)
+        await _handle_cancelled(meeting_id, ctl)
     except Exception as e:
         print(f"[minutes] meeting={meeting_id} 실패: {e}", flush=True)
-        async with Session() as session:
-            m = await session.get(Meeting, meeting_id)
-            if m:
-                m.status = "error"
-                _mark_stage(m, "error")
-                await session.commit()
+        async with ctl.lock:
+            if ctl.stop.is_set():  # 중단 요청 중의 실패는 오류로 기록하지 않는다
+                if ctl.action != "cancel":
+                    await _apply_stop(meeting_id, ctl.action)
+                return
+            async with Session() as session:
+                m = await session.get(Meeting, meeting_id)
+                if m:
+                    m.status = "error"
+                    _mark_stage(m, "error")
+                    await session.commit()
         push.notify_meeting(meeting_id, "error")
         await _push_event(meeting_id, {"type": "error", "message": str(e)})
     finally:
         control.end(meeting_id, ctl)
 
 
-def _prepare_transcription(m: Meeting) -> str:
+def _prepare_transcription(m: Meeting, diarize: bool = True) -> str:
     """전사(화자분리) 재실행 준비: 기존 결과 초기화 + status=processing. 커밋은 호출자가 담당. live_transcript(폴백용) 반환."""
     live_transcript = m.transcript
     m.status = "processing"
+    m.diarize = diarize
     _mark_stage(m, "prepare")
     m.segments = ""
     m.named_transcript = ""
@@ -717,21 +766,23 @@ def _prepare_transcription(m: Meeting) -> str:
 
 
 @app.post("/api/meetings/{meeting_id}/regenerate")
-async def regenerate_meeting(meeting_id: int, background_tasks: BackgroundTasks, user: str = Depends(current_user)):
-    """원천 오디오 기반으로 화자분리·회의록 전체 재실행."""
+async def regenerate_meeting(meeting_id: int, background_tasks: BackgroundTasks, diarize: bool = True,
+                             user: str = Depends(current_user)):
+    """원천 오디오 기반으로 화자분리·회의록 전체 재실행(diarize=false 면 화자 분리 생략)."""
     async with Session() as session:
         m = await _owned(session, meeting_id, user)
         if not os.path.isfile(_full_audio_path(meeting_id)):
             raise HTTPException(status_code=404, detail="원천 오디오 없음 — 재생성 불가")
-        live_transcript = _prepare_transcription(m)
+        live_transcript = _prepare_transcription(m, diarize)
         await session.commit()
 
-    background_tasks.add_task(_run_diarization, meeting_id, live_transcript)
+    background_tasks.add_task(_run_diarization, meeting_id, live_transcript, False, None, diarize)
     return {"id": meeting_id, "status": "processing"}
 
 
 @app.post("/api/meetings/{meeting_id}/transcribe")
-async def transcribe_meeting(meeting_id: int, background_tasks: BackgroundTasks, user: str = Depends(current_user)):
+async def transcribe_meeting(meeting_id: int, background_tasks: BackgroundTasks, diarize: bool = True,
+                             user: str = Depends(current_user)):
     """업로드 확정(uploaded) 후 전사 실행, 또는 실패한 전사의 수동 재시도."""
     async with Session() as session:
         m = await _owned(session, meeting_id, user)
@@ -739,10 +790,10 @@ async def transcribe_meeting(meeting_id: int, background_tasks: BackgroundTasks,
             raise HTTPException(status_code=400, detail=f"전사 가능한 상태가 아님 (현재: {m.status})")
         if not os.path.isfile(_full_audio_path(meeting_id)):
             raise HTTPException(status_code=404, detail="원천 오디오 없음")
-        live_transcript = _prepare_transcription(m)
+        live_transcript = _prepare_transcription(m, diarize)
         await session.commit()
 
-    background_tasks.add_task(_run_diarization, meeting_id, live_transcript)
+    background_tasks.add_task(_run_diarization, meeting_id, live_transcript, False, None, diarize)
     return {"id": meeting_id, "status": "processing"}
 
 
@@ -757,10 +808,31 @@ async def _stop_request(meeting_id: int, user: str, action: str) -> dict:
         status = m.status
     ctl = control.get(meeting_id) if status != "paused" else None
     if ctl is not None:
-        ctl.request(action)  # 워커가 정리를 마치면 status 가 바뀐다(폴링으로 반영)
-        return {"id": meeting_id, "status": status, "pending_action": ctl.action}
+        ctl.request(action)  # 실행 중인 단계를 즉시 끊는다(프로세스 kill·HTTP 요청 close·GPU job 취소)
+        if action == "pause":
+            return {"id": meeting_id, "status": status, "pending_action": ctl.action}  # 체크포인트는 워커가 정리 후 기록
+        # 취소: 워커를 기다리지 않고 지금 상태를 바꾼다. 워커가 늦게 끝나도 ctl.stop 때문에 아무것도 쓰지 못한다.
+        async with ctl.lock:
+            new_status = await _apply_stop(meeting_id, "cancel")
+        return {"id": meeting_id, "status": new_status, "pending_action": None}
     # 살아있는 워커가 없다(paused 이거나 재시작 직후 등) → 직접 반영
     return {"id": meeting_id, "status": await _apply_stop(meeting_id, action), "pending_action": None}
+
+
+@app.post("/api/meetings/{meeting_id}/skip-diarize")
+async def skip_diarize(meeting_id: int, user: str = Depends(current_user)):
+    """화자 분리를 건너뛴다: 실행 중이면 GPU 의 화자 분리만 즉시 취소하고 전사 결과로 계속한다(전사 중이면 전사가 끝나는 즉시).
+    이후 회의록은 화자 없는 전사본으로 만든다. 일시정지/재개를 거쳐도 유지된다."""
+    async with Session() as session:
+        m = await _owned(session, meeting_id, user)
+        if m.status not in ("processing", "paused") or m.stage not in ("prepare", "transcribe", "diarize"):
+            raise HTTPException(status_code=400, detail=f"건너뛸 화자 분리가 없습니다 (현재: {m.status}/{m.stage})")
+        m.diarize = False
+        await session.commit()
+    ctl = control.get(meeting_id)
+    if ctl is not None:
+        ctl.skip()
+    return {"id": meeting_id, "diarize": False, "pending_skip": ctl is not None}
 
 
 @app.post("/api/meetings/{meeting_id}/pause")
@@ -799,12 +871,13 @@ async def resume_meeting(meeting_id: int, background_tasks: BackgroundTasks, use
         if not os.path.isfile(_full_audio_path(meeting_id)):
             raise HTTPException(status_code=404, detail="원천 오디오 없음 — 재개 불가")
         saved = cp.get("transcript") if stage == "diarize" else None
+        diarize = m.diarize is not False
         live_transcript = m.transcript or await _chunk_transcript(session, meeting_id)
         m.status = "processing"
         _mark_stage(m, "diarize" if saved else "prepare")
         m.checkpoint = ""
         await session.commit()
-    background_tasks.add_task(_run_diarization, meeting_id, live_transcript, False, saved)
+    background_tasks.add_task(_run_diarization, meeting_id, live_transcript, False, saved, diarize)
     return {"id": meeting_id, "status": "processing"}
 
 
@@ -816,6 +889,7 @@ async def upload_recording(
     audio: UploadFile = File(...),
     title: str | None = Form(None),
     auto_minutes: bool = Form(False),
+    diarize: bool = Form(True),
     user: str = Depends(current_user),
 ):
     """업로드 확정 단계: meeting 생성 + 오디오 remux까지만 동기 수행하고 즉시 반환, 전사는 백그라운드로 이어감."""
@@ -836,20 +910,21 @@ async def upload_recording(
         await session.commit()
     push.notify_meeting(meeting_id, "uploaded")
 
-    background_tasks.add_task(_start_transcription_after_upload, meeting_id, auto_minutes)
+    background_tasks.add_task(_start_transcription_after_upload, meeting_id, auto_minutes, diarize)
     return {"id": meeting_id, "status": "uploaded"}
 
 
-async def _start_transcription_after_upload(meeting_id: int, auto_minutes: bool) -> None:
+async def _start_transcription_after_upload(meeting_id: int, auto_minutes: bool, diarize: bool = True) -> None:
     """업로드 백그라운드 태스크: status=processing 커밋 후 _run_diarization 실행 (uploaded 중복 전사 방지용)."""
     async with Session() as session:
         m = await session.get(Meeting, meeting_id)
         if not m:
             return
         m.status = "processing"
+        m.diarize = diarize
         _mark_stage(m, "prepare")
         await session.commit()
-    await _run_diarization(meeting_id, "", auto_minutes)
+    await _run_diarization(meeting_id, "", auto_minutes, None, diarize)
 
 
 @app.post("/api/process")
@@ -935,6 +1010,7 @@ async def get_meeting(meeting_id: int, user: str = Depends(current_user)):
             "stage": m.stage,
             "checkpoint": _checkpoint_view(m.checkpoint),
             "pending_action": getattr(control.get(m.id), "action", None),
+            "diarize": m.diarize is not False,
             "progress": m.progress if m.stage == "transcribe" else None,
             "stage_started_at": (m.stage_started_at.isoformat() + "Z") if m.stage_started_at else None,
             "canvas_id": m.canvas_id or f"drec-{m.id}",
@@ -1020,6 +1096,10 @@ if os.path.isdir(STATIC_DIR):
     # SPA 딥링크(/m/{id} — 푸시 알림 클릭·새로고침)는 index.html 로 돌려준다.
     @app.get("/m/{_path:path}", include_in_schema=False)
     async def spa_fallback(_path: str):
+        return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+
+    @app.get("/backups", include_in_schema=False)  # 로컬 백업 관리 페이지 새로고침
+    async def spa_backups():
         return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

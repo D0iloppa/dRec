@@ -3,6 +3,7 @@
 // 로컬 백업(IndexedDB, localRec.ts)은 자동으로 지우지 않는다 — 성공하면 '검토 대기'로 바꾸고, 삭제는 사용자 승인으로만.
 import { create } from 'zustand';
 import { api } from './api';
+import { usePrefs } from './prefs';
 import { flushSlices, markFinishedLocal, markUploadedLocal } from './localRec';
 
 export type UploadPhase = 'uploading' | 'converting' | 'failed' | 'done';
@@ -76,7 +77,7 @@ export const useUploader = create<UploaderState>((set) => {
 
   async function finalize(id: number, uploaded: boolean) {
     try {
-      await api.finishSession(id);
+      await api.finishSession(id, usePrefs.getState().diarize);
       blobs.delete(id);
       const localId = localIds.get(id) ?? id;
       localIds.delete(id);

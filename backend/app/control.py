@@ -3,10 +3,12 @@
 in-memory 레지스트리라 프로세스 재시작 시 사라진다(재시작 복구는 db.recover_interrupted).
 """
 
+import asyncio
 import os
 import signal
 import subprocess
 import threading
+from typing import Callable
 
 
 class Cancelled(Exception):
@@ -19,17 +21,51 @@ class RunControl:
         self.action: str | None = None  # "pause" | "cancel" — 요청된 동작(최초 요청 유지)
         self.job_id: str | None = None  # diarize: GPU job id
         self.transcript: list | None = None  # diarize: GPU 가 돌려준 원시 전사 [[start,end,text],…]
-        self.proc: subprocess.Popen | None = None  # minutes: claude CLI 프로세스
+        self.proc: subprocess.Popen | None = None  # 실행 중인 외부 프로세스(claude CLI / ffmpeg)
+        self.skip_diarize = False  # True 면 화자 분리를 건너뛰고 전사 결과만으로 진행(중단 아님)
+        # 상태 전이 직렬화: 워커의 결과 기록과 취소 반영이 같은 락 안에서만 일어나 늦은 완료가 취소를 덮지 못한다.
+        self.lock = asyncio.Lock()
+        self._closers: list[Callable[[], None]] = []
+        self._closers_lock = threading.Lock()
+
+    def add_closer(self, fn: Callable[[], None]) -> Callable[[], None]:
+        """중단 시 호출될 정리 콜백(블로킹 HTTP 클라이언트 close 등). 반환값으로 등록 해제.
+        이미 중단된 뒤 등록하면 즉시 호출한다."""
+        with self._closers_lock:
+            self._closers.append(fn)
+        if self.stop.is_set():
+            _safe(fn)
+
+        def remove() -> None:
+            with self._closers_lock:
+                if fn in self._closers:
+                    self._closers.remove(fn)
+        return remove
 
     def request(self, action: str) -> None:
-        self.action = self.action or action
+        # 취소는 일시정지보다 우선(일시정지 정리 중에 취소가 오면 취소로 바뀐다)
+        self.action = "cancel" if action == "cancel" else (self.action or action)
         self.stop.set()
         if self.proc is not None:
             kill_proc(self.proc)
+        with self._closers_lock:
+            closers = list(self._closers)
+        for fn in closers:
+            _safe(fn)
+
+    def skip(self) -> None:
+        self.skip_diarize = True
 
     def check(self) -> None:
         if self.stop.is_set():
             raise Cancelled()
+
+
+def _safe(fn: Callable[[], None]) -> None:
+    try:
+        fn()
+    except Exception:  # noqa: BLE001 — 정리 콜백 실패가 중단 요청 자체를 막으면 안 된다
+        pass
 
 
 def kill_proc(proc: subprocess.Popen) -> None:

@@ -36,6 +36,7 @@ export interface MeetingDetail extends MeetingSummary {
   // 일시정지/취소 (구버전 백엔드·레거시 행에선 undefined)
   checkpoint?: { stage: PipelineStage | null; has_transcript: boolean } | null; // status === 'paused' 일 때
   pending_action?: 'pause' | 'cancel' | null; // 요청됨, 워커가 정리 중
+  diarize?: boolean; // false = 화자 분리 없이 전사만(시작 시 선택했거나 진행 중 건너뜀)
 }
 
 // 'cancelled' 는 취소로 uploaded 로 되돌아간 행의 표시용 stage
@@ -158,13 +159,16 @@ export const api = {
       body: JSON.stringify({ speaker_meta: speakerMeta }),
     }).then(json<{ id: number; status: string }>),
 
-  regenerateMeeting: (id: number) =>
-    authedFetch(`/api/meetings/${id}/regenerate`, { method: 'POST' }).then(json<{ id: number; status: string }>),
+  regenerateMeeting: (id: number, diarize = true) =>
+    authedFetch(`/api/meetings/${id}/regenerate?diarize=${diarize}`, { method: 'POST' }).then(json<{ id: number; status: string }>),
+  /** 진행 중인 화자 분리를 건너뛰고 전사 결과만으로 이어간다. */
+  skipDiarize: (id: number) =>
+    authedFetch(`/api/meetings/${id}/skip-diarize`, { method: 'POST' }).then(json<{ id: number; diarize: boolean }>),
 
   pauseMeeting: (id: number) => authedFetch(`/api/meetings/${id}/pause`, { method: 'POST' }).then(json<{ id: number; status: string }>),
   resumeMeeting: (id: number) => authedFetch(`/api/meetings/${id}/resume`, { method: 'POST' }).then(json<{ id: number; status: string }>),
   cancelMeeting: (id: number) => authedFetch(`/api/meetings/${id}/cancel`, { method: 'POST' }).then(json<{ id: number; status: string }>),
-  transcribeMeeting: (id: number) => authedFetch(`/api/meetings/${id}/transcribe`, { method: 'POST' }).then(json<{ id: number; status: string }>),
+  transcribeMeeting: (id: number, diarize = true) => authedFetch(`/api/meetings/${id}/transcribe?diarize=${diarize}`, { method: 'POST' }).then(json<{ id: number; status: string }>),
 
   pushPublicKey: () => authedFetch('/api/push/vapid-public-key').then(json<{ public_key: string }>),
   pushSubscribe: (sub: PushSubscriptionJSON) =>
@@ -212,8 +216,8 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ state }),
     }).then(json<{ ok: boolean }>),
-  finishSession: (id: number) =>
-    authedFetch(`/api/sessions/${id}/finish`, { method: 'POST' }).then(
+  finishSession: (id: number, diarize = true) =>
+    authedFetch(`/api/sessions/${id}/finish?diarize=${diarize}`, { method: 'POST' }).then(
       json<{ id: number; status: string }>,
     ),
 

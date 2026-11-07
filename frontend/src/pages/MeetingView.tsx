@@ -10,6 +10,7 @@ import { Sketch, prefetchSketchpad } from '../components/SketchpadLazy';
 import AudioCard from '../components/AudioCard';
 import PipelineMonitor, { PipelineAction } from '../components/PipelineMonitor';
 import { useUploader } from '../uploader';
+import { usePrefs } from '../prefs';
 import LocalBackupPanel from '../components/LocalBackupPanel';
 
 // 상세 응답 전에 먼저 그려지는 페이지 뼈대: 사이드바 목록에 있는 제목/날짜를 미리 보여주고 나머지는 스켈레톤.
@@ -368,11 +369,33 @@ export default function MeetingView() {
     setError('');
     setLocalAction('resume');
     try {
-      await api.transcribeMeeting(mid);
+      await api.transcribeMeeting(mid, usePrefs.getState().diarize);
       setData(await api.getMeeting(mid));
       refresh();
     } catch (e) {
       setLocalAction(null);
+      setError(String((e as Error).message || e));
+    }
+  }
+
+  async function handleSkipDiarize() {
+    setError('');
+    try {
+      await api.skipDiarize(mid);
+      setData(await api.getMeeting(mid));
+    } catch (e) {
+      setError(String((e as Error).message || e));
+    }
+  }
+
+  // 화자 분리를 건너뛴 회의에 화자 분리를 다시 실행(원천 오디오 기반 전체 재실행)
+  async function handleRunDiarize() {
+    if (!(await dialog.confirm('화자 분리를 실행할까요?', '원천 오디오로 전사와 화자 분리를 다시 실행합니다. 시간이 더 걸립니다.', '실행'))) return;
+    setError('');
+    try {
+      await api.regenerateMeeting(mid, true);
+      setData(await api.getMeeting(mid));
+    } catch (e) {
       setError(String((e as Error).message || e));
     }
   }
@@ -383,7 +406,7 @@ export default function MeetingView() {
     if (!ok) return;
     setError('');
     try {
-      await api.regenerateMeeting(mid);
+      await api.regenerateMeeting(mid, usePrefs.getState().diarize);
       setData((prev) => prev ? { ...prev, status: 'processing', stage: null, progress: null, stage_started_at: null, segments: [], named_transcript: '', minutes: '' } : null);
     } catch (e) {
       setError(String((e as Error).message || e));
@@ -454,6 +477,7 @@ export default function MeetingView() {
       onAction={handlePipelineAction}
       onCancelUpload={() => useUploader.getState().cancel(mid)}
       onRestart={handleRestart}
+      onSkipDiarize={handleSkipDiarize}
     />
   );
 
@@ -522,6 +546,9 @@ export default function MeetingView() {
                   {speakers.length === 0 && (
                     <p style={{ color: 'var(--text-dim)', fontSize: 14 }}>
                       화자 분리 결과가 없습니다. 회의록만 생성합니다.
+                      {data.diarize === false && data.has_audio && (
+                        <> <button className="pipe-link" onClick={handleRunDiarize}>화자 분리 실행</button></>
+                      )}
                     </p>
                   )}
                   {data.segments.length > 0 && (

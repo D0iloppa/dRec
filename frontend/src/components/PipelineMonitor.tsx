@@ -44,7 +44,7 @@ function pausedNote(stage: StepKey, hasTranscript: boolean): string {
 }
 
 export default function PipelineMonitor({
-  data, upload, pending, onRetry, onRecover, onRegenerate, onAction, onCancelUpload, onRestart,
+  data, upload, pending, onRetry, onRecover, onRegenerate, onAction, onCancelUpload, onRestart, onSkipDiarize,
 }: {
   data: MeetingDetail;
   upload?: UploadState;
@@ -55,6 +55,7 @@ export default function PipelineMonitor({
   onAction: (a: PipelineAction) => void;
   onCancelUpload: () => void;
   onRestart: () => void;                // 취소로 되돌아간 행의 전사 재시작
+  onSkipDiarize: () => void;            // 화자 분리 건너뛰기(전사만으로 계속)
 }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -110,10 +111,11 @@ export default function PipelineMonitor({
   const step = currentStep(data, upload);
   if (!step) return null;
 
-  const steps: StepKey[] = ['upload', 'prepare', 'transcribe', 'diarize'];
+  const noDiarize = data.diarize === false; // 화자 분리 없이 진행(시작 시 끔 또는 건너뜀) — 단계 표시에서 뺀다
+  const steps: StepKey[] = noDiarize ? ['upload', 'prepare', 'transcribe'] : ['upload', 'prepare', 'transcribe', 'diarize'];
   if (step === 'minutes' || data.status === 'processing_minutes') steps.push('minutes');
   // 회의록 단계에서는 앞 단계가 모두 끝난 상태이므로 업로드까지 포함한 전체 스텝퍼를 그대로 쓴다.
-  const curIdx = steps.indexOf(step);
+  const curIdx = Math.max(0, steps.indexOf(step === 'diarize' && noDiarize ? 'transcribe' : step));
 
   const dur = data.audio_duration_sec ?? null;
   const startedAt = data.stage_started_at ? parseUtc(data.stage_started_at) : null;
@@ -151,6 +153,11 @@ export default function PipelineMonitor({
   }
   if (dur && step !== 'upload') detail.push(`녹음 길이 ${fmtDuration(dur)}`);
   if (step === 'minutes') headline = '회의록 생성 중';
+  if (noDiarize && (step === 'diarize' || step === 'transcribe')) {
+    headline = '전사';
+    detail.push('화자 분리 없이 진행');
+  }
+  const canSkip = !noDiarize && (step === 'transcribe' || step === 'diarize') && data.status === 'processing';
 
   const failed = step === 'upload' && upload?.phase === 'failed';
 
@@ -193,6 +200,7 @@ export default function PipelineMonitor({
             <span className="pipe-pending"><span className="processing-spinner" /> {PENDING_LABEL[pending]}</span>
           ) : (
             <>
+              {canSkip && <button className="pipe-btn" onClick={onSkipDiarize} title="전사가 끝나면 화자 분리 없이 회의록 단계로 넘어갑니다">화자 분리 건너뛰기</button>}
               <button className="pipe-btn" onClick={() => onAction('pause')}>일시정지</button>
               <button className="pipe-btn" onClick={() => onAction('cancel')}>취소</button>
             </>
