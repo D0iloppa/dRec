@@ -353,6 +353,7 @@ button { font-family: inherit; cursor: pointer; }
   letter-spacing: 1px;
   color: var(--text);
 }
+.rec-wave { display: block; width: 100%; max-width: 360px; height: 56px; margin: 16px auto 0; }
 .rec-status { margin-top: 10px; color: var(--text-dim); min-height: 20px; }
 .finish-btn {
   margin-top: 18px;

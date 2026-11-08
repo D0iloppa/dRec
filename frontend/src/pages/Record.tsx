@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mic, Square, Pause, Play, AlertTriangle, RefreshCw } from 'lucide-react';
 import { api, SseEvent } from '../api';
@@ -9,6 +9,7 @@ import { dialog } from '../ui/dialog';
 import { diag, flushDiag } from '../diag';
 import { appendFull, beginLocal, enqueueSlice, kickQueue, localRec, setLocalTitle, setRecordedMs, useLocalRec } from '../localRec';
 import { Sketch } from '../components/SketchpadLazy';
+import { Waveform } from '../components/Waveform';
 
 // VAD 설정
 const SILENCE_THRESHOLD = 8;    // RMS 임계값 (0-255 스케일)
@@ -155,6 +156,8 @@ export default function Record() {
   // VAD refs
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const levelRef = useRef(0);
+  const readLevel = useCallback(() => levelRef.current, []);
   const vadRafRef = useRef<number | null>(null);
   const silenceStartRef = useRef<number | null>(null);
   const maxChunkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -256,6 +259,7 @@ export default function Record() {
       if (!activeRef.current) return;
       analyser.getByteFrequencyData(data);
       const rms = Math.sqrt(data.reduce((s, v) => s + v * v, 0) / data.length);
+      levelRef.current = Math.min(1, rms / 60); // 입력 음파 표시용(Waveform)
 
       if (rms < SILENCE_THRESHOLD) {
         if (!silenceStartRef.current) silenceStartRef.current = Date.now();
@@ -275,6 +279,7 @@ export default function Record() {
     if (vadRafRef.current !== null) cancelAnimationFrame(vadRafRef.current);
     vadRafRef.current = null;
     silenceStartRef.current = null;
+    levelRef.current = 0;
   }
 
   // ── 스트림/녹음기 구성 ──────────────────────────────────────────────────────
@@ -898,6 +903,7 @@ export default function Record() {
             </button>
           )}
 
+          {active && <Waveform recording={status === 'recording'} paused={status === 'paused'} level={readLevel} />}
           {active && <div className={`rec-time${status === 'recording' && timeState !== 'ok' ? ' unconfirmed' : ''}`}>{fmtElapsed(elapsedMs)}</div>}
 
           <div className="rec-status">
