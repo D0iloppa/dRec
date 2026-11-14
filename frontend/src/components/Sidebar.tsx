@@ -55,7 +55,7 @@ export default function Sidebar() {
       </div>
 
       <button className="new-btn" onClick={() => { navigate('/'); closeOnMobile(); }}>
-        <Plus size={16} /> 새 녹음
+        <Plus size={16} /> 새 회의 노트
       </button>
 
       <div className="sidebar-search" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

@@ -86,7 +86,7 @@ export default function RecoveryBanner() {
   }
 
   async function remove(m: LocalSummary) {
-    const ok = await dialog.confirm('기기에 보관된 녹음을 삭제할까요?', '삭제하면 되돌릴 수 없습니다. 먼저 업로드하거나 파일로 저장하세요.', '삭제');
+    const ok = await dialog.confirm('기기에 보관된 음성을 삭제할까요?', '삭제하면 되돌릴 수 없습니다. 먼저 업로드하거나 파일로 저장하세요.', '삭제');
     if (ok) await purgeLocal(m.id);
   }
 
@@ -94,7 +94,7 @@ export default function RecoveryBanner() {
     <div className="recover-banner" role="alert">
       {shown.length > 0 && (
         <div className="recover-head">
-          <AlertTriangle size={18} /> 업로드되지 않은 녹음이 기기에 남아 있습니다
+          <AlertTriangle size={18} /> 업로드되지 않은 음성이 기기에 남아 있습니다
         </div>
       )}
       {shown.map((m) => (
@@ -117,7 +117,7 @@ export default function RecoveryBanner() {
       ))}
       {review.length > 0 && (
         <div className="recover-note">
-          <HardDrive size={14} /> 업로드 후 검토 대기 중인 백업 {review.length}건 — 사이드바 「이 기기의 녹음 백업」에서 결과를 확인하고 승인하면 삭제됩니다.
+          <HardDrive size={14} /> 업로드 후 검토 대기 중인 백업 {review.length}건 — 사이드바 「이 기기의 음성 백업」에서 결과를 확인하고 승인하면 삭제됩니다.
         </div>
       )}
       {low && est && (

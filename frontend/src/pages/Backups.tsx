@@ -82,7 +82,7 @@ export default function Backups() {
     const up = uploads[serverIdOf(m)];
     const busy = up?.phase === 'uploading' || up?.phase === 'converting';
     const v: Verdict = !loaded ? { kind: 'unknown', warn: '' }
-      : srv === null ? { kind: 'missing', warn: '서버에 이 회의가 없습니다. 백업을 지우면 녹음을 되살릴 수 없습니다.' }
+      : srv === null ? { kind: 'missing', warn: '서버에 이 회의가 없습니다. 백업을 지우면 음성을 되살릴 수 없습니다.' }
       : verdict(localDur, srv.hasAudio ? srv.durationSec : null, srv.hasAudio, busy);
     return { srv, approx, localDur, busy, v, measuring: m.id in localSecs === false };
   }, [servers, localSecs, uploads]);
@@ -123,7 +123,7 @@ export default function Backups() {
     const skipped = sel.length - safe.length;
     const ok = await dialog.confirm(
       `${safe.length}건을 승인하고 삭제할까요?`,
-      `서버 녹음 길이가 기기 백업과 일치하는 검토 대기 항목만 삭제합니다.${skipped ? ` 나머지 ${skipped}건은 건드리지 않습니다.` : ''} 삭제 후에는 되돌릴 수 없습니다.`,
+      `서버 음성 길이가 기기 백업과 일치하는 검토 대기 항목만 삭제합니다.${skipped ? ` 나머지 ${skipped}건은 건드리지 않습니다.` : ''} 삭제 후에는 되돌릴 수 없습니다.`,
       '승인하고 삭제',
     );
     if (!ok) return;
@@ -138,7 +138,7 @@ export default function Backups() {
     const ok = await dialog.confirmGuarded(
       `선택한 ${sel.length}건을 삭제할까요?`,
       risky
-        ? `업로드 미완료이거나 서버 길이가 확인·일치되지 않은 백업이 ${risky}건 포함되어 있습니다. 삭제하면 해당 녹음 원본을 되살릴 수 없습니다.`
+        ? `업로드 미완료이거나 서버 길이가 확인·일치되지 않은 백업이 ${risky}건 포함되어 있습니다. 삭제하면 해당 음성 원본을 되살릴 수 없습니다.`
         : '삭제 후에는 되돌릴 수 없습니다.',
       '삭제',
     );
@@ -154,8 +154,8 @@ export default function Backups() {
 
   return (
     <div className="page">
-      <h1 className="bk-page-title"><HardDrive size={22} /> 녹음 백업</h1>
-      <p className="bk-lead">이 기기에 남아 있는 녹음 원본입니다. 서버 결과를 확인하고 승인하기 전까지 자동으로 지워지지 않습니다.</p>
+      <h1 className="bk-page-title"><HardDrive size={22} /> 음성 백업</h1>
+      <p className="bk-lead">이 기기에 남아 있는 음성 원본입니다. 서버 결과를 확인하고 승인하기 전까지 자동으로 지워지지 않습니다.</p>
 
       <section className="bk-usage">
         <div className="bk-usage-row">
@@ -175,8 +175,8 @@ export default function Backups() {
       {items !== null && list.length === 0 && (
         <div className="bk-empty">
           <HardDrive size={28} />
-          <div>기기에 남은 녹음 백업이 없습니다</div>
-          <div className="bk-sub">녹음을 마치면 업로드 후 이곳에 검토 대기로 보관됩니다.</div>
+          <div>기기에 남은 음성 백업이 없습니다</div>
+          <div className="bk-sub">기록을 마치면 업로드 후 이곳에 검토 대기로 보관됩니다.</div>
         </div>
       )}
 

@@ -155,7 +155,7 @@ function toBuf(blob: Blob): Promise<ArrayBuffer> {
 function storageFail(e: unknown): void {
   const name = (e as DOMException | null)?.name;
   const msg = name === 'QuotaExceededError'
-    ? '기기 저장 공간이 부족해 로컬 백업이 중단되었습니다. 녹음은 계속되지만 앱이 닫히면 유실될 수 있습니다.'
+    ? '기기 저장 공간이 부족해 로컬 백업이 중단되었습니다. 기록은 계속되지만 앱이 닫히면 음성이 유실될 수 있습니다.'
     : `로컬 백업 실패: ${e instanceof Error ? e.message : String(e)}`;
   if (useLocalRec.getState().storageError !== msg) useLocalRec.setState({ storageError: msg });
 }
@@ -406,7 +406,7 @@ export async function saveBlobs(id: number, blobs: Blob[]): Promise<'shared' | '
   const mobile = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   if (mobile && typeof nav.share === 'function' && nav.canShare?.({ files })) {
     try {
-      await nav.share({ files, title: `dRec 녹음 #${id}` });
+      await nav.share({ files, title: `dRec 음성 #${id}` });
       return 'shared';
     } catch (e) {
       const name = (e as DOMException | null)?.name;

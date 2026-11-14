@@ -33,7 +33,7 @@ export default function LocalBackups() {
   return (
     <NavLink to="/backups" className={({ isActive }) => `backup-entry${isActive ? ' active' : ''}`} onClick={closeOnMobile}>
       <HardDrive size={14} />
-      <span className="backup-entry-label">녹음 백업</span>
+      <span className="backup-entry-label">음성 백업</span>
       {review > 0 && <span className="bk-badge review">{review}건 검토 대기</span>}
       {incomplete > 0 && <span className="bk-badge incomplete">{incomplete}건 미완료</span>}
       {count === 0 && low && <span className="bk-badge warn">공간 부족</span>}

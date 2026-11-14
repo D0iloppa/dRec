@@ -21,7 +21,7 @@ export default function Layout() {
       const d = e.data as { type?: string; url?: string } | null;
       if (d?.type !== 'drec:navigate' || !d.url) return;
       if (localRec.activeId !== null) {
-        if (d.url !== '/') toast('녹음 중이라 이동하지 않았습니다. 녹음을 마친 뒤 확인하세요.');
+        if (d.url !== '/') toast('기록 중이라 이동하지 않았습니다. 기록을 마친 뒤 확인하세요.');
         return;
       }
       navigate(d.url);

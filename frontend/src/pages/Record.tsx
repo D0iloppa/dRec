@@ -11,6 +11,20 @@ import { appendFull, beginLocal, enqueueSlice, kickQueue, localRec, setLocalTitl
 import { Sketch } from '../components/SketchpadLazy';
 import { Waveform } from '../components/Waveform';
 
+// 전송 대기 표시 안정화: 정상 동작에서도 3초 조각마다 큐가 잠깐 1(=전송 중)이 되므로,
+// 실제 적체(2개 이상 또는 실패 후 재시도)가 일정 시간 지속될 때만 켜고, 풀려도 잠시 유지해 깜빡임을 막는다.
+const BACKLOG_SHOW_MS = 4_000;
+const BACKLOG_HIDE_MS = 2_000;
+function useSettledFlag(flag: boolean, showMs: number, hideMs: number): boolean {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    if (flag === on) return;
+    const h = setTimeout(() => setOn(flag), flag ? showMs : hideMs);
+    return () => clearTimeout(h);
+  }, [flag, on, showMs, hideMs]);
+  return on;
+}
+
 // VAD 설정
 const SILENCE_THRESHOLD = 8;    // RMS 임계값 (0-255 스케일)
 const SILENCE_MS = 700;         // 이 시간 이상 무음이면 청크 종료
@@ -76,7 +90,7 @@ function alarm() {
 }
 
 /** 화면이 숨겨진 상태면 로컬 알림(권한이 이미 있을 때만 — 여기서 권한을 묻지 않는다). */
-function localNotify(meetingId: number, body: string, title = '녹음이 중단되었습니다', tag = `rec-mic-${meetingId}`) {
+function localNotify(meetingId: number, body: string, title = '기록이 중단되었습니다', tag = `rec-mic-${meetingId}`) {
   try {
     if (!document.hidden || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
     void navigator.serviceWorker?.ready.then((r) =>
@@ -109,6 +123,7 @@ export default function Record() {
   const [resuming, setResuming] = useState(false);
   const sendFailures = useLocalRec((s) => s.sendFailures);
   const lastSendError = useLocalRec((s) => s.lastSendError);
+  const showBacklog = useSettledFlag(pendingSlices >= 2 || (pendingSlices > 0 && sendFailures > 0), BACKLOG_SHOW_MS, BACKLOG_HIDE_MS);
   const [title, setTitle] = useState('');
   const savedTitleRef = useRef('');   // 서버에 반영된 제목(생성 시 전달 또는 마지막 PATCH)
   const titleRef = useRef('');
@@ -216,11 +231,11 @@ export default function Record() {
       rec.start();
     } catch (e) {
       // 트랙이 죽은 스트림이면 여기서 실패한다 — 예전엔 조용히 끊겨 이후 조각이 하나도 안 갔다
-      micProblem(`전사 조각 녹음 실패: ${e instanceof Error ? e.message : String(e)}`);
+      micProblem(`받아쓰기 조각 저장 실패: ${e instanceof Error ? e.message : String(e)}`);
       return;
     }
     rec.ondataavailable = (e) => { if (e.data.size > 0) slicePartsRef.current.push(e.data); };
-    rec.onerror = () => micProblem('전사 조각 녹음기 오류');
+    rec.onerror = () => micProblem('받아쓰기 조각 저장 오류');
     rec.onstop = () => {
       const blob = new Blob(slicePartsRef.current, { type: mimeRef.current || 'audio/webm' });
       const seq = seqRef.current++;
@@ -235,7 +250,7 @@ export default function Record() {
         diag(mid, 'slice_tiny', { seq, size: blob.size, parts: slicePartsRef.current.length, active: activeRef.current });
         if (activeRef.current && sliceStreamRef.current === stream) {
           const n = ++tinySlicesRef.current;
-          if (n === TINY_WARN) setDataWarn(`전사 조각이 연속 ${n}개 비어 있습니다 — 마이크 입력을 확인하세요`);
+          if (n === TINY_WARN) setDataWarn(`받아쓰기 조각이 연속 ${n}개 비어 있습니다 — 마이크 입력을 확인하세요`);
           if (n >= TINY_RECONNECT) { tinySlicesRef.current = 0; micProblem('마이크 입력 데이터가 비어 있습니다'); return; }
         }
       }
@@ -349,14 +364,14 @@ export default function Record() {
     full.onerror = (e) => {
       const err = (e as Event & { error?: DOMException }).error;
       diag(mid, 'full_error', { gen, name: err?.name, msg: err?.message, state: full.state });
-      if (fullRecRef.current === full) micProblem('녹음기 오류가 발생했습니다');
+      if (fullRecRef.current === full) micProblem('음성 저장 오류가 발생했습니다');
     };
     full.onstart = () => diag(mid, 'full_start', { gen, mime: full.mimeType, state: full.state });
     full.onstop = () => {
       const intended = intendedStopRef.current.has(full);
       diag(mid, 'full_stop', { gen, intended, bytes: genBytes, parts: bucket.parts.length });
       // 우리가 멈춘 게 아닌데 멈췄다(Safari 는 트랙이 끝나면 녹음기를 스스로 멈춘다)
-      if (!intended && fullRecRef.current === full) micProblem('녹음이 예기치 않게 중단되었습니다');
+      if (!intended && fullRecRef.current === full) micProblem('음성 저장이 예기치 않게 중단되었습니다');
     };
     full.start(FULL_SLICE_MS);
     fullRecRef.current = full;
@@ -376,7 +391,7 @@ export default function Record() {
       setTimeout(() => {
         if (fullRecRef.current !== full || genDataSeenRef.current || statusRef.current !== 'recording') return;
         diag(mid, 'verify_fail', { gen, state: full.state, track: stream.getAudioTracks()[0]?.readyState, muted: stream.getAudioTracks()[0]?.muted });
-        micProblem('녹음을 시작했지만 데이터가 들어오지 않습니다');
+        micProblem('기록을 시작했지만 음성이 들어오지 않습니다');
       }, VERIFY_FAIL_MS),
     ];
   }
@@ -493,9 +508,9 @@ export default function Record() {
     const track = streamRef.current?.getAudioTracks()[0];
     if (!track || track.readyState === 'ended') { micProblem('마이크 연결이 끊겼습니다'); return; }
     const full = fullRecRef.current;
-    if (!full || full.state === 'inactive') { micProblem('녹음이 예기치 않게 중단되었습니다'); return; }
+    if (!full || full.state === 'inactive') { micProblem('음성 저장이 예기치 않게 중단되었습니다'); return; }
     if (fullTimesliceOkRef.current && Date.now() - lastFullDataRef.current > STALL_MS) {
-      micProblem('녹음 데이터가 들어오지 않습니다');
+      micProblem('음성이 들어오지 않습니다');
       return;
     }
     const ctx = audioCtxRef.current;
@@ -627,7 +642,7 @@ export default function Record() {
   /** 종료 요청: 오탭으로 회의 도중 종료되지 않게 확인을 거친다. */
   async function requestFinish() {
     if (statusRef.current === 'idle') return;
-    const ok = await dialog.confirmGuarded('녹음을 종료할까요?', '종료하면 녹음을 업로드하고 전사·회의록 생성을 시작합니다. 이어서 녹음할 수 없습니다.', '종료');
+    const ok = await dialog.confirmGuarded('기록을 마칠까요?', '마치면 음성을 업로드하고 받아쓰기·회의록 정리를 시작합니다. 이어서 기록할 수 없습니다.', '종료');
     if (ok && (statusRef.current as Status) !== 'idle') void finish();
   }
 
@@ -825,7 +840,7 @@ export default function Record() {
         nextAlert = ms + PAUSE_ALERT_MS;
         alarm();
         const id = sessionRef.current;
-        if (id !== null) localNotify(id, `${Math.floor(ms / 60_000)}분째 일시정지 중입니다. 회의 중이라면 재개하세요.`, '녹음이 일시정지 상태입니다', `rec-paused-${id}`);
+        if (id !== null) localNotify(id, `${Math.floor(ms / 60_000)}분째 일시정지 중입니다. 회의 중이라면 재개하세요.`, '기록이 일시정지 상태입니다', `rec-paused-${id}`);
       }
     }, 1000);
     return () => clearInterval(t);
@@ -849,33 +864,33 @@ export default function Record() {
       <div className="rec-left">
         {micAlert?.kind === 'lost' && (
           <div className="mic-alert" role="alert">
-            <div className="mic-alert-title"><AlertTriangle size={26} /> 녹음이 중단되었습니다</div>
+            <div className="mic-alert-title"><AlertTriangle size={26} /> 기록이 중단되었습니다 — 음성이 저장되지 않고 있어요</div>
             <div className="mic-alert-reason">{micAlert.reason}</div>
             {micAlert.busy ? (
               <div className="mic-alert-busy"><RefreshCw size={16} className="spin" /> 마이크 다시 연결 중…</div>
             ) : (
               <button className="mic-alert-btn" onClick={tapReconnect}>
-                <Mic size={20} /> {micAlert.needTap ? '탭해서 녹음 재개' : status === 'paused' ? '재개하면 다시 연결합니다' : '지금 다시 연결'}
+                <Mic size={20} /> {micAlert.needTap ? '탭해서 기록 재개' : status === 'paused' ? '재개하면 다시 연결합니다' : '지금 다시 연결'}
               </button>
             )}
           </div>
         )}
         {status === 'paused' && micAlert?.kind !== 'lost' && (
           <div className="pause-alert" role="alert">
-            <div className="pause-alert-title"><Pause size={24} /> 일시정지 중 — 지금 녹음되지 않고 있습니다</div>
+            <div className="pause-alert-title"><Pause size={24} /> 일시정지 중 — 지금 음성이 저장되지 않고 있어요</div>
             <div className="pause-alert-sub">{fmtElapsed(pausedForMs)}째 일시정지{pausedForMs >= PAUSE_ALERT_MS ? ' · 회의 중이라면 바로 재개하세요' : ''}</div>
-            <button className="pause-alert-btn" onClick={() => void resume()} disabled={busy || resuming}><Play size={20} /> {resuming ? '재개 중…' : '녹음 재개'}</button>
+            <button className="pause-alert-btn" onClick={() => void resume()} disabled={busy || resuming}><Play size={20} /> {resuming ? '재개 중…' : '기록 재개'}</button>
           </div>
         )}
         {micAlert?.kind === 'recovered' && (
           <div className="mic-alert recovered" role="status">
-            마이크를 다시 연결해 녹음을 이어갑니다{micAlert.gapSec > 0 ? ` · 약 ${micAlert.gapSec}초 누락` : ''}
+            마이크를 다시 연결해 기록을 이어갑니다{micAlert.gapSec > 0 ? ` · 약 ${micAlert.gapSec}초 누락` : ''}
             <button className="mic-alert-close" onClick={() => setMicAlert(null)} aria-label="닫기">✕</button>
           </div>
         )}
         <div className="rec-hero">
-          <h1>회의 녹음</h1>
-          <p>버튼을 누르면 바로 녹음이 시작됩니다. 말이 끊기면 자동으로 전사됩니다.</p>
+          <h1>회의 노트</h1>
+          <p>버튼을 누르면 대화를 받아 적고, 끝나면 회의록으로 정리해 드려요.</p>
 
           <input
             className="rec-title"
@@ -888,17 +903,17 @@ export default function Record() {
           />
 
           {status === 'idle' ? (
-            <button className="rec-btn" onClick={start} disabled={busy} aria-label="녹음 시작">
+            <button className="rec-btn" onClick={start} disabled={busy} aria-label="기록 시작">
               <Mic size={34} />
             </button>
           ) : status === 'recording' ? (
             // 녹음 중 가운데는 버튼이 아닌 표시등 — 시작 버튼 자리에 일시정지가 오지 않게(오탭 방지)
-            <div className="rec-btn recording rec-indicator" role="img" aria-label="녹음 중">
+            <div className="rec-btn recording rec-indicator" role="img" aria-label="기록 중">
               <Mic size={34} />
             </div>
           ) : (
             // 일시정지 중 가운데는 재개 버튼(잘못 눌러도 녹음이 재개될 뿐이라 안전)
-            <button className="rec-btn rec-resume" onClick={() => void resume()} disabled={busy || resuming} aria-label="녹음 재개">
+            <button className="rec-btn rec-resume" onClick={() => void resume()} disabled={busy || resuming} aria-label="기록 재개">
               <Play size={30} />
             </button>
           )}
@@ -907,30 +922,31 @@ export default function Record() {
           {active && <div className={`rec-time${status === 'recording' && timeState !== 'ok' ? ' unconfirmed' : ''}`}>{fmtElapsed(elapsedMs)}</div>}
 
           <div className="rec-status">
-            {status === 'recording' && micAlert?.kind !== 'lost' && timeState === 'ok' && <span><span className="dot">●</span> 녹음 중…</span>}
-            {status === 'recording' && micAlert?.kind !== 'lost' && timeState === 'checking' && <span className="warn">녹음 확인 중… (데이터가 들어오면 시간이 흐릅니다)</span>}
-            {status === 'recording' && micAlert?.kind !== 'lost' && timeState === 'stalled' && <span className="err">● 녹음 데이터가 들어오지 않습니다 — 시간 정지</span>}
-            {status === 'recording' && micAlert?.kind === 'lost' && <span className="err">● 녹음 중단됨</span>}
+            {status === 'recording' && micAlert?.kind !== 'lost' && timeState === 'ok' && <span><span className="dot">●</span> 기록 중…</span>}
+            {status === 'recording' && micAlert?.kind !== 'lost' && timeState === 'checking' && <span className="warn">기록 확인 중… (음성이 들어오면 시간이 흐릅니다)</span>}
+            {status === 'recording' && micAlert?.kind !== 'lost' && timeState === 'stalled' && <span className="err">● 음성이 들어오지 않습니다 — 시간 정지</span>}
+            {status === 'recording' && micAlert?.kind === 'lost' && <span className="err">● 기록 중단됨</span>}
             {status === 'paused' && <span>⏸ 일시정지됨</span>}
             {busy && <span>처리 중…</span>}
             {error && <span className="err">{error}</span>}
           </div>
-          {active && (pendingSlices > 0 || storageError) && (
-            <div className="rec-substatus">
-              {pendingSlices > 0 && <div>전사 조각 {pendingSlices}개 전송 대기 — 자동 재시도 중(녹음은 기기에 보관됨)</div>}
-              {storageError && <div className="err">{storageError}</div>}
+          {active && (
+            // 고정 높이 한 줄 슬롯 — 대기 표시가 켜지고 꺼져도 아래 컨트롤·전사 패널이 움직이지 않게 한다.
+            <div className={`rec-backlog${showBacklog && pendingSlices > 0 ? ' on' : ''}`} role="status" aria-live="polite">
+              {showBacklog && pendingSlices > 0 && <><RefreshCw size={12} className="spin" /> 받아쓰기 대기 {pendingSlices}개 · 음성은 기기에 보관됨</>}
             </div>
           )}
+          {active && storageError && <div className="rec-substatus"><div className="err">{storageError}</div></div>}
           {active && (dataWarn || sendFailures >= 3) && (
             <div className="rec-substatus">
               {dataWarn && <div className="err">{dataWarn}</div>}
-              {sendFailures >= 3 && <div className="err">전사 조각 전송이 연속 {sendFailures}회 실패했습니다({lastSendError}) — 녹음은 기기에 보관되고 자동 재시도합니다</div>}
+              {sendFailures >= 3 && <div className="err">받아쓰기 조각 전송이 연속 {sendFailures}회 실패했습니다({lastSendError}) — 음성은 기기에 보관되고 자동 재시도합니다</div>}
             </div>
           )}
 
           {active && (
             <div className="rec-controls">
-              <label className="diarize-opt" title="끄면 전사만 하고 화자 분리는 건너뜁니다(빠름)">
+              <label className="diarize-opt" title="끄면 받아쓰기만 하고 화자 분리는 건너뜁니다(빠름)">
                 <input type="checkbox" checked={diarize} onChange={(e) => setDiarize(e.target.checked)} /> 화자 분리
               </label>
               {status === 'recording' && (
@@ -947,10 +963,10 @@ export default function Record() {
 
         {active && (
           <div className="live-panel">
-            <div className="live-head">실시간 전사</div>
+            <div className="live-head">실시간 받아쓰기</div>
             <div className="live-body" ref={liveBodyRef}>
               {liveSegs.length === 0 ? (
-                <span className="live-wait">말씀하시면 전사됩니다…</span>
+                <span className="live-wait">말씀하시면 받아 적습니다…</span>
               ) : (
                 liveSegs.map((s, i) => (
                   <div key={i} className={i === liveSegs.length - 1 ? 'live-line live-last' : 'live-line'}>
@@ -967,7 +983,7 @@ export default function Record() {
         {sessionId !== null ? (
           <Sketch meetingId={sessionId} />
         ) : (
-          <div className="rec-sketch-idle">✏️<br />녹음을 시작하면<br />스케치패드가 열립니다</div>
+          <div className="rec-sketch-idle">✏️<br />기록을 시작하면<br />스케치패드가 열립니다</div>
         )}
       </div>
     </div>

@@ -11,7 +11,7 @@ function view(h: GpuHealth | null, failed: boolean): View {
   if (!h) return { cls: 'sleep', text: '확인 중…' };
   if (h.warming) return { cls: 'warming', text: '깨우는 중…' };
   if (!h.reachable) return { cls: 'down', text: '연결 불가' };
-  if (h.caffeine_sec > 0) return { cls: 'ready', text: `☕ 녹음 중 유지 (${Math.ceil(h.caffeine_sec / 60)}분)` };
+  if (h.caffeine_sec > 0) return { cls: 'ready', text: `☕ 기록 중 유지 (${Math.ceil(h.caffeine_sec / 60)}분)` };
   if (h.loaded && h.diarize_loaded) {
     if (h.idle_unload_sec && h.idle_sec !== null) {
       const left = Math.max(1, Math.ceil((h.idle_unload_sec - h.idle_sec) / 60));

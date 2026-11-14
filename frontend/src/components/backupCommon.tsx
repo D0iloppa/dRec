@@ -14,12 +14,12 @@ export interface Verdict { kind: VerdictKind; warn: string }
 /** 기기 백업 길이와 서버 녹음 길이를 비교한다. */
 export function verdict(localDur: number | null, serverDur: number | null, serverHasAudio: boolean, uploadBusy: boolean): Verdict {
   if (uploadBusy) return { kind: 'busy', warn: '' }; // 업로드 중에는 서버 길이가 아직 없다
-  if (!serverHasAudio) return { kind: 'missing', warn: '서버에 원본 녹음이 없습니다. 백업으로 다시 업로드하세요.' };
+  if (!serverHasAudio) return { kind: 'missing', warn: '서버에 원본 음성이 없습니다. 백업으로 다시 업로드하세요.' };
   if (localDur && serverDur != null) {
     if (serverDur < localDur * MISMATCH_RATIO) {
       return {
         kind: 'mismatch',
-        warn: `서버 녹음(${fmtDuration(serverDur)})이 기기 백업(${fmtDuration(localDur)})보다 ${Math.round((1 - serverDur / localDur) * 100)}% 짧습니다. 업로드·조립 중 일부가 빠졌을 수 있습니다.`,
+        warn: `서버 음성(${fmtDuration(serverDur)})이 기기 백업(${fmtDuration(localDur)})보다 ${Math.round((1 - serverDur / localDur) * 100)}% 짧습니다. 업로드·조립 중 일부가 빠졌을 수 있습니다.`,
       };
     }
     return { kind: 'match', warn: '' };
@@ -55,7 +55,7 @@ export function BackupCompare({ meta, localDur, approx, measuring, serverDur, se
       </div>
       <div className="bk-eq" aria-hidden>{kind === 'match' ? '=' : kind === 'mismatch' || kind === 'missing' ? '≠' : '·'}</div>
       <div className="bk-tile">
-        <div className="bk-k">서버 녹음</div>
+        <div className="bk-k">서버 음성</div>
         <div className="bk-v">{serverDur != null ? fmtDuration(serverDur) : serverHasAudio ? '길이 미확인' : '없음'}</div>
         <div className="bk-sub">{kind === 'match' ? '길이 일치' : kind === 'mismatch' ? '더 짧음' : ' '}</div>
       </div>
@@ -71,7 +71,7 @@ export async function approveAndPurge(meta: LocalSummary, warn: string): Promise
   }
   const ok = await dialog.confirm(
     '업로드 완료를 승인하고 백업을 삭제할까요?',
-    '서버의 녹음·전사 결과를 확인했다면 승인하세요. 삭제 후에는 되돌릴 수 없습니다. 필요하면 먼저 "파일로 저장"하세요.',
+    '서버의 음성·받아쓰기 결과를 확인했다면 승인하세요. 삭제 후에는 되돌릴 수 없습니다. 필요하면 먼저 "파일로 저장"하세요.',
     '승인하고 삭제',
   );
   if (!ok) return false;
@@ -82,13 +82,13 @@ export async function approveAndPurge(meta: LocalSummary, warn: string): Promise
 
 /** 업로드 미완료 백업 삭제(원본을 되살릴 수 없으므로 강하게 확인). */
 export async function purgeIncomplete(meta: LocalSummary): Promise<boolean> {
-  const ok = await dialog.confirm('업로드되지 않은 백업입니다', '삭제하면 이 녹음의 원본을 되살릴 수 없습니다. 정말 삭제할까요?', '삭제');
+  const ok = await dialog.confirm('업로드되지 않은 백업입니다', '삭제하면 이 음성의 원본을 되살릴 수 없습니다. 정말 삭제할까요?', '삭제');
   if (ok) await purgeLocal(meta.id);
   return ok;
 }
 
 export const REUPLOAD_CONFIRM = {
   title: '기기 백업으로 다시 업로드할까요?',
-  text: '서버의 원본 녹음을 이 백업으로 교체하고 전사·화자 분리를 다시 실행합니다. 백업은 그대로 남습니다.',
+  text: '서버의 원본 음성을 이 백업으로 교체하고 받아쓰기·화자 분리를 다시 실행합니다. 백업은 그대로 남습니다.',
   ok: '다시 업로드',
 };

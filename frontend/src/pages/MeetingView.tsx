@@ -339,8 +339,8 @@ export default function MeetingView() {
   }
 
   const CANCEL_NOTE: Record<string, string> = {
-    minutes: '회의록 생성을 취소합니다. 전사 결과는 유지됩니다.',
-    other: '진행을 취소합니다. 업로드된 녹음은 유지되고 이 처리의 결과는 버려집니다. 나중에 전사를 다시 시작할 수 있습니다.',
+    minutes: '회의록 생성을 취소합니다. 받아쓰기 결과는 유지됩니다.',
+    other: '진행을 취소합니다. 업로드된 음성은 유지되고 이 처리의 결과는 버려집니다. 나중에 받아쓰기를 다시 시작할 수 있습니다.',
   };
 
   async function handlePipelineAction(kind: PipelineAction) {
@@ -390,7 +390,7 @@ export default function MeetingView() {
 
   // 화자 분리를 건너뛴 회의에 화자 분리를 다시 실행(원천 오디오 기반 전체 재실행)
   async function handleRunDiarize() {
-    if (!(await dialog.confirm('화자 분리를 실행할까요?', '원천 오디오로 전사와 화자 분리를 다시 실행합니다. 시간이 더 걸립니다.', '실행'))) return;
+    if (!(await dialog.confirm('화자 분리를 실행할까요?', '원천 오디오로 받아쓰기와 화자 분리를 다시 실행합니다. 시간이 더 걸립니다.', '실행'))) return;
     setError('');
     try {
       await api.regenerateMeeting(mid, true);
@@ -429,8 +429,8 @@ export default function MeetingView() {
 
   function exportTranscriptMd() {
     if (!data) return;
-    const title = data.title || '전사전문';
-    let content = `# ${title} — 전사 전문\n\n`;
+    const title = data.title || '대화전문';
+    let content = `# ${title} — 대화 전문\n\n`;
     if (data.segments.length > 0) {
       data.segments.forEach((s) => {
         const name = nameOf(s.speaker, data.speaker_meta);
@@ -444,7 +444,7 @@ export default function MeetingView() {
 
   function exportTranscriptJson() {
     if (!data) return;
-    const title = data.title || '전사전문';
+    const title = data.title || '대화전문';
     const payload = {
       title: data.title,
       created_at: data.created_at,
@@ -511,8 +511,8 @@ export default function MeetingView() {
       {isPreProcessing && (
         upload || data.status === 'uploaded' ? monitor : (
           <div className="pipeline failed">
-            <div className="pipe-title">녹음이 완료 처리되지 않았습니다</div>
-            <div className="pipe-hint">녹음 도중 창이 닫혔거나 업로드가 끊긴 것 같습니다. 이미 전송된 조각으로 회의록을 만들 수 있습니다.</div>
+            <div className="pipe-title">기록이 완료 처리되지 않았습니다</div>
+            <div className="pipe-hint">기록 도중 창이 닫혔거나 업로드가 끊긴 것 같습니다. 이미 전송된 조각으로 회의록을 만들 수 있습니다.</div>
             <div className="pipe-actions">
               <button className="pipe-btn primary" onClick={recoverChunks}>조각으로 복구</button>
             </div>
@@ -554,7 +554,7 @@ export default function MeetingView() {
                   {data.segments.length > 0 && (
                     <div className="transcript-preview">
                       <div className="transcript-preview-head">
-                        전사 전문 미리보기
+                        대화 전문 미리보기
                         {data.has_audio && <span style={{ fontWeight: 400, marginLeft: 6 }}>· 구간 클릭 시 재생</span>}
                       </div>
                       {data.has_audio ? (
@@ -595,7 +595,7 @@ export default function MeetingView() {
               <FileText size={15} /> 회의록
             </button>
             <button className={`chip${tab === 'transcript' ? ' active' : ''}`} onClick={() => setTab('transcript')}>
-              <ListMusic size={15} /> 전사 전문
+              <ListMusic size={15} /> 대화 전문
             </button>
             <button className={`chip${tab === 'sketch' ? ' active' : ''}`} onClick={() => setTab('sketch')} onPointerEnter={prefetchSketchpad}>
               <PenLine size={15} /> 스케치패드
@@ -658,7 +658,7 @@ export default function MeetingView() {
             ) : data.named_transcript ? (
               <div className="transcript">{data.named_transcript}</div>
             ) : (
-              <p style={{ color: '#999' }}>전사본이 없습니다.</p>
+              <p style={{ color: '#999' }}>받아쓴 내용이 없습니다.</p>
             )}
           </div>
 

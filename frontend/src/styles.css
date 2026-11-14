@@ -852,6 +852,16 @@ span.skel { display: inline-block; height: 12px; }
 .mic-alert .spin { animation: mic-spin 1s linear infinite; }
 @keyframes mic-spin { to { transform: rotate(360deg); } }
 .rec-substatus { margin-top: 6px; font-size: 13px; color: var(--text-dim); }
+.rec-backlog {
+  height: 18px; margin-top: 4px;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  font-size: 12px; line-height: 18px; color: var(--text-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  opacity: 0; transition: opacity .3s;
+}
+.rec-backlog.on { opacity: 1; }
+.rec-backlog .spin { animation: mic-spin 1.4s linear infinite; flex: none; }
+@media (prefers-reduced-motion: reduce) { .rec-backlog .spin { animation: none; } }
 
 .recover-banner {
   margin: 0 0 14px; padding: 12px 14px;

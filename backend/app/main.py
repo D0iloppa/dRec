@@ -652,7 +652,7 @@ async def _diarization_steps(meeting_id: int, live_transcript: str, auto_minutes
                 _mark_stage(m, "error")
                 await session.commit()
                 push.notify_meeting(meeting_id, "error")
-                await _push_event(meeting_id, {"type": "error", "message": "전사 결과가 비었습니다"})
+                await _push_event(meeting_id, {"type": "error", "message": "받아쓰기 결과가 비었습니다"})
                 return
             m.transcript = transcript
             m.segments = segments_json
@@ -695,7 +695,7 @@ async def generate_minutes(
     async with Session() as session:
         m = await _owned(session, meeting_id, user)
         if m.status not in ("transcribed", "done", "error"):
-            raise HTTPException(status_code=400, detail=f"전사 완료 후 요청 가능 (현재: {m.status})")
+            raise HTTPException(status_code=400, detail=f"받아쓰기 완료 후 요청 가능 (현재: {m.status})")
         meta = {k: v.model_dump() for k, v in body.speaker_meta.items()}
         m.speaker_meta = json.dumps(meta, ensure_ascii=False)
         m.status = "processing_minutes"
@@ -955,7 +955,7 @@ async def process(audio: UploadFile = File(...), user: str = Depends(current_use
             m.status = "error"
             _mark_stage(m, "error")
             await session.commit()
-        raise HTTPException(status_code=422, detail="전사 결과가 비었습니다")
+        raise HTTPException(status_code=422, detail="받아쓰기 결과가 비었습니다")
 
     async with Session() as session:
         m = await session.get(Meeting, meeting_id)

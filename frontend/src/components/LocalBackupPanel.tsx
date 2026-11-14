@@ -90,7 +90,7 @@ export default function LocalBackupPanel({ meetingId, serverDurationSec, serverH
     <section className={`bk-card${warn ? ' warn' : ''}`}>
       <header className="bk-head">
         <HardDrive size={16} />
-        <span className="bk-title">이 기기의 녹음 백업</span>
+        <span className="bk-title">이 기기의 음성 백업</span>
         <StateBadge meta={meta} />
         <Link className="bk-link" to="/backups">백업 관리 <ChevronRight size={13} /></Link>
       </header>

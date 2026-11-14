@@ -11,7 +11,7 @@
 - 판정(30초 주기 루프): status=recording 이고, 일시정지가 아니고, 활동이 최근(ACTIVE_WINDOW_SEC)이며,
   마지막 조각(없으면 감시 시작 시각) 이후 N분 경과 → 1회 알림. 같은 무음 구간(같은 last_chunk)엔 다시 보내지 않는다.
 - 일시정지 감시(2026-10-29 실제 원인 = 시작 직후 오탭으로 3시간 일시정지): 하트비트가 paused 인 채로
-  DREC_REC_PAUSE_ALERT_MIN(기본 5)분 넘게 이어지고 화면이 살아 있으면 "녹음이 일시정지 상태입니다" 푸시.
+  DREC_REC_PAUSE_ALERT_MIN(기본 5)분 넘게 이어지고 화면이 살아 있으면 "기록이 일시정지 상태입니다" 푸시.
   같은 정지 구간엔 1회, 정지가 길어지면 PAUSE_REPEAT_SEC(15분) 간격으로 재알림. 재개하면 초기화.
 """
 
@@ -152,7 +152,7 @@ async def check_once(now: float | None = None) -> list[int]:
         if pause_due(w, now, plimit):
             w.pause_notified_at = now
             mins = int((now - (w.paused_since or now)) // 60)
-            push.notify(user_id or "", "녹음이 일시정지 상태입니다",
+            push.notify(user_id or "", "기록이 일시정지 상태입니다",
                         f"{name} — {mins}분째 일시정지 중입니다. 회의 중이라면 재개하세요.",
                         "/", f"rec-paused-{mid}")
             print(f"[recwatch] meeting={mid} {mins}분 일시정지 알림", flush=True)
@@ -163,8 +163,8 @@ async def check_once(now: float | None = None) -> list[int]:
         base = w.last_chunk or w.since
         w.notified_for = base
         mins = int((now - base) // 60)
-        push.notify(user_id or "", "녹음이 들어오지 않습니다",
-                    f"{name} — {mins}분째 녹음 조각이 없습니다. 마이크 상태를 확인하세요.",
+        push.notify(user_id or "", "음성이 들어오지 않습니다",
+                    f"{name} — {mins}분째 음성이 들어오지 않습니다. 마이크 상태를 확인하세요.",
                     "/", f"rec-silence-{mid}")
         print(f"[recwatch] meeting={mid} {mins}분 무음 알림", flush=True)
         sent.append(mid)

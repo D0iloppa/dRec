@@ -9,7 +9,7 @@ type StepKey = 'upload' | 'prepare' | 'transcribe' | 'diarize' | 'minutes';
 const LABEL: Record<StepKey, string> = {
   upload: '업로드',
   prepare: '오디오 준비',
-  transcribe: '전사',
+  transcribe: '받아쓰기',
   diarize: '화자 분리',
   minutes: '회의록',
 };
@@ -38,8 +38,8 @@ const PENDING_LABEL: Record<'pause' | 'cancel' | 'resume', string> = {
 
 /** 일시정지 카드에 보여줄 "무엇이 보존되는가 / 재개하면 어떻게 되는가" 문구. */
 function pausedNote(stage: StepKey, hasTranscript: boolean): string {
-  if (stage === 'minutes') return '전사 결과 보존됨 · 재개하면 회의록 생성을 처음부터 다시 합니다.';
-  if (stage === 'diarize' && hasTranscript) return '전사 결과 보존됨 · 재개하면 화자 분리부터 이어서 합니다.';
+  if (stage === 'minutes') return '받아쓰기 결과 보존됨 · 재개하면 회의록 생성을 처음부터 다시 합니다.';
+  if (stage === 'diarize' && hasTranscript) return '받아쓰기 결과 보존됨 · 재개하면 화자 분리부터 이어서 합니다.';
   return `재개하면 ${LABEL[stage]} 단계를 처음부터 다시 시작합니다.`;
 }
 
@@ -68,9 +68,9 @@ export default function PipelineMonitor({
     return (
       <div className="pipeline paused">
         <div className="pipe-title">처리가 취소되었습니다</div>
-        <div className="pipe-hint">업로드된 녹음은 그대로 보관되어 있습니다. 필요하면 전사를 다시 시작하세요.</div>
+        <div className="pipe-hint">업로드된 음성은 그대로 보관되어 있습니다. 필요하면 받아쓰기를 다시 시작하세요.</div>
         <div className="pipe-actions">
-          <button className="pipe-btn primary" onClick={onRestart} disabled={!!pending}>전사 다시 시작</button>
+          <button className="pipe-btn primary" onClick={onRestart} disabled={!!pending}>받아쓰기 다시 시작</button>
         </div>
       </div>
     );
@@ -139,7 +139,7 @@ export default function PipelineMonitor({
       detail = [fmtBytes(upload.total)];
     } else {
       pct = upload.total > 0 ? upload.loaded / upload.total : 0;
-      headline = '녹음 업로드 중';
+      headline = '음성 업로드 중';
       detail = [`${fmtBytes(upload.loaded)} / ${fmtBytes(upload.total)}`];
       if (upload.speed > 0) detail.push(`${fmtBytes(upload.speed)}/s`);
       if (upload.etaSec !== null) detail.push(`남은 시간 약 ${fmtRemain(upload.etaSec)}`);
@@ -151,10 +151,10 @@ export default function PipelineMonitor({
   } else if (elapsed !== null) {
     detail.push(`경과 ${fmtRemain(elapsed)}`);
   }
-  if (dur && step !== 'upload') detail.push(`녹음 길이 ${fmtDuration(dur)}`);
+  if (dur && step !== 'upload') detail.push(`기록 길이 ${fmtDuration(dur)}`);
   if (step === 'minutes') headline = '회의록 생성 중';
   if (noDiarize && (step === 'diarize' || step === 'transcribe')) {
-    headline = '전사';
+    headline = '받아쓰기';
     detail.push('화자 분리 없이 진행');
   }
   const canSkip = !noDiarize && (step === 'transcribe' || step === 'diarize') && data.status === 'processing';
@@ -200,7 +200,7 @@ export default function PipelineMonitor({
             <span className="pipe-pending"><span className="processing-spinner" /> {PENDING_LABEL[pending]}</span>
           ) : (
             <>
-              {canSkip && <button className="pipe-btn" onClick={onSkipDiarize} title="전사가 끝나면 화자 분리 없이 회의록 단계로 넘어갑니다">화자 분리 건너뛰기</button>}
+              {canSkip && <button className="pipe-btn" onClick={onSkipDiarize} title="받아쓰기가 끝나면 화자 분리 없이 회의록 단계로 넘어갑니다">화자 분리 건너뛰기</button>}
               <button className="pipe-btn" onClick={() => onAction('pause')}>일시정지</button>
               <button className="pipe-btn" onClick={() => onAction('cancel')}>취소</button>
             </>
@@ -214,7 +214,7 @@ export default function PipelineMonitor({
             <button className="pipe-btn primary" onClick={onRetry}>재시도</button>
             <button className="pipe-btn" onClick={onRecover}>조각으로 복구</button>
           </div>
-          <div className="pipe-hint">조각으로 복구하면 실시간 전사에 쓰인 짧은 조각을 이어 붙여 처리하며, 음질이 낮을 수 있습니다.</div>
+          <div className="pipe-hint">조각으로 복구하면 실시간 받아쓰기에 쓰인 짧은 조각을 이어 붙여 처리하며, 음질이 낮을 수 있습니다.</div>
         </>
       )}
       {stalled && (

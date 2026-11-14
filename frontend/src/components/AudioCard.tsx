@@ -8,7 +8,7 @@ export default function AudioCard({ id, hasM4a, durationSec }: { id: number; has
     <div className="audio-card">
       <div className="audio-card-head">
         <Headphones size={15} />
-        <span>원본 녹음</span>
+        <span>원본 음성</span>
         {durationSec ? <span className="audio-card-dur">{fmtDuration(durationSec)}</span> : null}
       </div>
       {/* preload=none: 상세 진입 시 수십 MB 오디오를 미리 당기지 않는다(길이는 헤더의 durationSec 로 표시). 재생 시 Range 로 스트리밍. */}

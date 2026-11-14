@@ -103,7 +103,7 @@ def notify(user_id: str, title: str, body: str, url: str = "/", tag: str = "drec
 # 단계 이벤트 → 알림 제목. 본문은 "<회의 제목>".
 EVENTS = {
     "uploaded": "업로드 완료",
-    "transcribe_done": "전사 완료",
+    "transcribe_done": "받아쓰기 완료",
     "diarize_done": "화자 분리 완료",
     "done": "회의록 완료",
     "error": "처리 오류",
